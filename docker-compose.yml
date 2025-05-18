@@ -1,0 +1,39 @@
+services:
+  db:
+    image: postgres:13
+    volumes:
+      - ./database/data:/var/lib/postgresql/data
+      - ./database/init.sql:/docker-entrypoint-initdb.d/init.sql
+    environment:
+      POSTGRES_USER: schoolmeal
+      POSTGRES_PASSWORD: securepassword
+      POSTGRES_DB: schoolmealdb
+    ports:
+      - "5432:5432"
+      
+  backend:
+    build: ./backend
+    ports:
+      - "5000:5000"
+    depends_on:
+      - db
+    environment:
+      - DATABASE_URL=postgresql://schoolmeal:securepassword@db:5432/schoolmealdb
+      
+  crawler:
+    build: ./crawler
+    depends_on:
+      - db
+    environment:
+      - DB_HOST=db
+      - DB_NAME=schoolmealdb
+      - DB_USER=schoolmeal
+      - DB_PASSWORD=securepassword
+    restart: unless-stopped
+
+  frontend:
+    build: ./frontend
+    ports:
+      - "80:80"
+    depends_on:
+      - backend
