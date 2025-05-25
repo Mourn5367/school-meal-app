@@ -19,7 +19,33 @@ services:
       - db
     environment:
       - DATABASE_URL=postgresql://schoolmeal:securepassword@db:5432/schoolmealdb
+
+  frontend:
+    build: ./frontend
+    ports:
+      - "80:80"
+    depends_on:
+      - backend
+    # Selenium Grid Hub 추가
+  selenium-hub:
+    image: selenium/hub:4.10.0
+    container_name: selenium-hub
+    ports:
+      - "4444:4444"
       
+  # Chrome 노드 추가
+  chrome:
+    image: selenium/node-chrome:4.10.0
+    depends_on:
+      - selenium-hub
+    environment:
+      - SE_EVENT_BUS_HOST=selenium-hub
+      - SE_EVENT_BUS_PUBLISH_PORT=4442
+      - SE_EVENT_BUS_SUBSCRIBE_PORT=4443
+    volumes:
+      - /dev/shm:/dev/shm
+      
+  # 크롤러 서비스 업데이트
   crawler:
     build: ./crawler
     depends_on:
@@ -29,11 +55,4 @@ services:
       - DB_NAME=schoolmealdb
       - DB_USER=schoolmeal
       - DB_PASSWORD=securepassword
-    restart: unless-stopped
-
-  frontend:
-    build: ./frontend
-    ports:
-      - "80:80"
-    depends_on:
-      - backend
+    restart: on-failure  # 실패 시 재시작
