@@ -4,7 +4,7 @@ import '../models/meal_model.dart';
 import '../models/post_model.dart';
 import 'post_detail_screen.dart';
 import 'package:intl/intl.dart';
-
+import 'post_create_screen.dart';
 class MealBoardScreen extends StatefulWidget {
   final Meal meal;
   final String date;
@@ -241,17 +241,33 @@ class _MealBoardScreenState extends State<MealBoardScreen> {
                           fontWeight: FontWeight.bold,
                         ),
                       ),
-                      ElevatedButton.icon(
-                        onPressed: () {
-                          // 게시글 작성 화면으로 이동
-                        },
-                        icon: Icon(Icons.edit, size: 16),
-                        label: Text('글쓰기'),
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: _getMealTypeColor(widget.meal.mealType),
-                          foregroundColor: Colors.white,
-                        ),
-                      ),
+ElevatedButton.icon(
+  onPressed: () {
+    // 게시글 작성 화면으로 이동
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => PostCreateScreen(
+          meal: widget.meal,
+          date: widget.date,
+        ),
+      ),
+    ).then((result) {
+      // 게시글이 작성되었다면 목록 새로고침
+      if (result == true) {
+        // 실제 API 연결 시 아래 부분 구현
+        // _loadPosts();
+        _loadDummyPosts(); // 임시로 더미 데이터 다시 로드
+      }
+    });
+  },
+  icon: Icon(Icons.edit, size: 16),
+  label: Text('글쓰기'),
+  style: ElevatedButton.styleFrom(
+    backgroundColor: _getMealTypeColor(widget.meal.mealType),
+    foregroundColor: Colors.white,
+  ),
+),
                     ],
                   ),
                 ),
