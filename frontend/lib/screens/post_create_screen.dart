@@ -35,43 +35,44 @@ class _PostCreateScreenState extends State<PostCreateScreen> {
 
   // 게시글 저장 함수
   Future<void> _savePost() async {
-    if (!_formKey.currentState!.validate()) {
-      return;
-    }
-
-    setState(() {
-      _isLoading = true;
-    });
-
-    try {
-      final apiService = Provider.of<ApiService>(context, listen: false);
-      
-      await apiService.createPost(
-        title: _titleController.text,
-        content: _contentController.text,
-        author: _authorController.text,
-        mealDate: widget.date,
-        mealType: widget.meal.mealType,
-      );
-
-      // 게시글 작성 성공
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('게시글이 작성되었습니다')),
-      );
-      
-      // 이전 화면으로 돌아가기
-      Navigator.pop(context, true);
-    } catch (e) {
-      // 오류 발생 시 처리
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('게시글 작성 중 오류가 발생했습니다: $e')),
-      );
-    } finally {
-      setState(() {
-        _isLoading = false;
-      });
-    }
+  if (!_formKey.currentState!.validate()) {
+    return;
   }
+
+  setState(() {
+    _isLoading = true;
+  });
+
+  try {
+    final apiService = Provider.of<ApiService>(context, listen: false);
+
+    // 날짜 파싱 및 재포맷
+    DateTime parsedDate = DateTime.parse(widget.date);
+    String formattedDate = parsedDate.toIso8601String().substring(0, 10);
+
+    await apiService.createPost(
+      title: _titleController.text,
+      content: _contentController.text,
+      author: _authorController.text,
+      mealDate: formattedDate,  // 포맷된 날짜 전달
+      mealType: widget.meal.mealType,
+    );
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text('게시글이 작성되었습니다')),
+    );
+
+    Navigator.pop(context, true);
+  } catch (e) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text('게시글 작성 중 오류가 발생했습니다: $e')),
+    );
+  } finally {
+    setState(() {
+      _isLoading = false;
+    });
+  }
+}
 
   @override
   Widget build(BuildContext context) {

@@ -243,24 +243,26 @@ class _MealBoardScreenState extends State<MealBoardScreen> {
                       ),
 ElevatedButton.icon(
   onPressed: () {
-    // 게시글 작성 화면으로 이동
-    Navigator.push(
-      context,
-      MaterialPageRoute(
-        builder: (context) => PostCreateScreen(
-          meal: widget.meal,
-          date: widget.date,
-        ),
+  final parsedDate = _parseDate(widget.date);
+  if (parsedDate == null) {
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('날짜 변환에 실패했습니다.')));
+    return;
+  }
+
+  Navigator.push(
+    context,
+    MaterialPageRoute(
+      builder: (context) => PostCreateScreen(
+        meal: widget.meal,
+        date: DateFormat('yyyy-MM-dd').format(parsedDate),
       ),
-    ).then((result) {
-      // 게시글이 작성되었다면 목록 새로고침
-      if (result == true) {
-        // 실제 API 연결 시 아래 부분 구현
-        // _loadPosts();
-        _loadDummyPosts(); // 임시로 더미 데이터 다시 로드
-      }
-    });
-  },
+    ),
+  ).then((result) {
+    if (result == true) {
+      _loadDummyPosts(); // API로 전환 시 실제 로직으로 교체
+    }
+  });
+},
   icon: Icon(Icons.edit, size: 16),
   label: Text('글쓰기'),
   style: ElevatedButton.styleFrom(
