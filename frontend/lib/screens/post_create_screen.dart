@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../services/api_service.dart';
 import '../models/meal_model.dart';
+import '../utils/date_utils.dart' as DateUtilsCustom;
 
 class PostCreateScreen extends StatefulWidget {
   final Meal meal;
@@ -35,44 +36,47 @@ class _PostCreateScreenState extends State<PostCreateScreen> {
 
   // 게시글 저장 함수
   Future<void> _savePost() async {
-  if (!_formKey.currentState!.validate()) {
-    return;
-  }
+    if (!_formKey.currentState!.validate()) {
+      return;
+    }
 
-  setState(() {
-    _isLoading = true;
-  });
-
-  try {
-    final apiService = Provider.of<ApiService>(context, listen: false);
-
-    // 날짜 파싱 및 재포맷
-    DateTime parsedDate = DateTime.parse(widget.date);
-    String formattedDate = parsedDate.toIso8601String().substring(0, 10);
-
-    await apiService.createPost(
-      title: _titleController.text,
-      content: _contentController.text,
-      author: _authorController.text,
-      mealDate: formattedDate,  // 포맷된 날짜 전달
-      mealType: widget.meal.mealType,
-    );
-
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text('게시글이 작성되었습니다')),
-    );
-
-    Navigator.pop(context, true);
-  } catch (e) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text('게시글 작성 중 오류가 발생했습니다: $e')),
-    );
-  } finally {
     setState(() {
-      _isLoading = false;
+      _isLoading = true;
     });
+
+    try {
+      final apiService = Provider.of<ApiService>(context, listen: false);
+
+      // 개선된 날짜 처리
+      String formattedDate = DateUtilsCustom.DateUtils.formatToApiDate(widget.date);
+      
+      print('원본 날짜: ${widget.date}');
+      print('포맷된 날짜: $formattedDate');
+
+      await apiService.createPost(
+        title: _titleController.text,
+        content: _contentController.text,
+        author: _authorController.text,
+        mealDate: formattedDate,
+        mealType: widget.meal.mealType,
+      );
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('게시글이 작성되었습니다')),
+      );
+
+      Navigator.pop(context, true);
+    } catch (e) {
+      print('게시글 작성 오류: $e');
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('게시글 작성 중 오류가 발생했습니다: $e')),
+      );
+    } finally {
+      setState(() {
+        _isLoading = false;
+      });
+    }
   }
-}
 
   @override
   Widget build(BuildContext context) {
@@ -126,9 +130,18 @@ class _PostCreateScreenState extends State<PostCreateScreen> {
                           ),
                           SizedBox(width: 8),
                           Expanded(
-                            child: Text(
-                              '${widget.meal.date} 메뉴에 대한 게시글',
-                              style: TextStyle(fontSize: 14),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  '${DateUtilsCustom.DateUtils.formatForDisplay(widget.date)} 메뉴',
+                                  style: TextStyle(fontSize: 14),
+                                ),
+                                Text(
+                                  '${widget.meal.mealType}에 대한 게시글',
+                                  style: TextStyle(fontSize: 12, color: Colors.grey[600]),
+                                ),
+                              ],
                             ),
                           ),
                         ],
