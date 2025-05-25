@@ -1,7 +1,9 @@
 // frontend/lib/screens/post_detail_screen.dart
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 import '../models/post_model.dart';
 import '../models/comment_model.dart';
+import '../services/api_service.dart';
 import 'package:intl/intl.dart';
 
 class PostDetailScreen extends StatefulWidget {
@@ -14,8 +16,9 @@ class PostDetailScreen extends StatefulWidget {
 }
 
 class _PostDetailScreenState extends State<PostDetailScreen> {
-  List<Comment> comments = [];
+  late Future<Map<String, dynamic>> _postDetailFuture;
   TextEditingController _commentController = TextEditingController();
+  TextEditingController _authorController = TextEditingController();
   bool isLiked = false;
   int likeCount = 0;
 
@@ -23,65 +26,79 @@ class _PostDetailScreenState extends State<PostDetailScreen> {
   void initState() {
     super.initState();
     likeCount = widget.post.likes;
-    _loadDummyComments();
+    _loadPostDetail();
   }
 
-  void _loadDummyComments() {
-    // 더미 댓글 데이터
-    comments = [
-      Comment(
-        id: 1,
-        content: "저도 오늘 토스트 먹었는데 정말 맛있었어요!",
-        author: "user1",
-        createdAt: DateTime.now().subtract(Duration(hours: 1)),
-        likes: 3,
-      ),
-      Comment(
-        id: 2,
-        content: "다음에도 또 나왔으면 좋겠네요",
-        author: "user2",
-        createdAt: DateTime.now().subtract(Duration(minutes: 30)),
-        likes: 1,
-      ),
-      Comment(
-        id: 3,
-        content: "고추장이 정말 잘 어울렸죠! 저도 인정합니다 👍",
-        author: "user3",
-        createdAt: DateTime.now().subtract(Duration(minutes: 15)),
-        likes: 2,
-      ),
-    ];
-  }
-
-  void _toggleLike() {
+  void _loadPostDetail() {
     setState(() {
-      if (isLiked) {
-        likeCount--;
-        isLiked = false;
-      } else {
-        likeCount++;
-        isLiked = true;
-      }
+      _postDetailFuture = _fetchPostDetail();
     });
   }
 
-  void _addComment() {
-    if (_commentController.text.trim().isNotEmpty) {
+  Future<Map<String, dynamic>> _fetchPostDetail() async {
+    try {
+      final apiService = Provider.of<ApiService>(context, listen: false);
+      return await apiService.getPostDetail(widget.post.id);
+    } catch (e) {
+      print('게시글 상세 조회 오류: $e');
+      // 오류 발생 시 기본 데이터 반환
+      return {
+        'post': widget.post,
+        'comments': <Comment>[],
+      };
+    }
+  }
+
+  Future<void> _toggleLike() async {
+    try {
+      final apiService = Provider.of<ApiService>(context, listen: false);
+      final result = await apiService.togglePostLike(widget.post.id);
+      
       setState(() {
-        comments.add(
-          Comment(
-            id: comments.length + 1,
-            content: _commentController.text.trim(),
-            author: "나",
-            createdAt: DateTime.now(),
-            likes: 0,
-          ),
-        );
+        isLiked = result['liked'];
+        likeCount = result['likes'];
       });
+    } catch (e) {
+      print('좋아요 처리 오류: $e');
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('좋아요 처리 중 오류가 발생했습니다')),
+      );
+    }
+  }
+
+  Future<void> _addComment() async {
+    if (_commentController.text.trim().isEmpty || _authorController.text.trim().isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('닉네임과 댓글 내용을 모두 입력해주세요')),
+      );
+      return;
+    }
+
+    try {
+      final apiService = Provider.of<ApiService>(context, listen: false);
+      await apiService.createComment(
+        postId: widget.post.id,
+        content: _commentController.text.trim(),
+        author: _authorController.text.trim(),
+      );
+
       _commentController.clear();
+      _authorController.clear();
       
       // 키보드 숨기기
       FocusScope.of(context).unfocus();
+      
+      // 댓글 목록 새로고침
+      _loadPostDetail();
+      
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('댓글이 작성되었습니다')),
+      );
+    } catch (e) {
+      print('댓글 작성 오류: $e');
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('댓글 작성 중 오류가 발생했습니다')),
+      );
     }
   }
 
@@ -105,191 +122,259 @@ class _PostDetailScreenState extends State<PostDetailScreen> {
         title: Text('게시글'),
         actions: [
           IconButton(
-            icon: Icon(Icons.more_vert),
-            onPressed: () {
-              // 더보기 메뉴
-            },
+            icon: Icon(Icons.refresh),
+            onPressed: _loadPostDetail,
           ),
         ],
       ),
-      body: Column(
-        children: [
-          Expanded(
-            child: SingleChildScrollView(
+      body: FutureBuilder<Map<String, dynamic>>(
+        future: _postDetailFuture,
+        builder: (context, snapshot) {
+          if (snapshot.connectionState == ConnectionState.waiting) {
+            return Center(child: CircularProgressIndicator());
+          } else if (snapshot.hasError) {
+            return Center(
               child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  // 게시글 내용
-                  Container(
-                    width: double.infinity,
-                    padding: EdgeInsets.all(20),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          widget.post.title,
-                          style: TextStyle(
-                            fontSize: 20,
-                            fontWeight: FontWeight.bold,
-                          ),
-                        ),
-                        SizedBox(height: 8),
-                        Row(
+                  Icon(Icons.error_outline, size: 48, color: Colors.red),
+                  SizedBox(height: 16),
+                  Text('게시글을 불러올 수 없습니다.'),
+                  SizedBox(height: 8),
+                  ElevatedButton(
+                    onPressed: _loadPostDetail,
+                    child: Text('다시 시도'),
+                  ),
+                ],
+              ),
+            );
+          }
+
+          final data = snapshot.data!;
+          final post = data['post'] as Post;
+          final comments = data['comments'] as List<Comment>;
+
+          return Column(
+            children: [
+              Expanded(
+                child: SingleChildScrollView(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      // 게시글 내용
+                      Container(
+                        width: double.infinity,
+                        padding: EdgeInsets.all(20),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
                             Text(
-                              widget.post.author,
+                              post.title,
                               style: TextStyle(
-                                color: Colors.grey[600],
-                                fontSize: 14,
+                                fontSize: 20,
+                                fontWeight: FontWeight.bold,
                               ),
                             ),
-                            SizedBox(width: 8),
-                            Text(
-                              _formatDateTime(widget.post.createdAt),
-                              style: TextStyle(
-                                color: Colors.grey[500],
-                                fontSize: 12,
-                              ),
-                            ),
-                          ],
-                        ),
-                        SizedBox(height: 20),
-                        
-                        // 이미지가 있다면 표시
-                        if (widget.post.imageUrl != null) ...[
-                          Container(
-                            width: double.infinity,
-                            height: 200,
-                            decoration: BoxDecoration(
-                              color: Colors.grey[200],
-                              borderRadius: BorderRadius.circular(8),
-                            ),
-                            child: Icon(
-                              Icons.image,
-                              size: 50,
-                              color: Colors.grey[400],
-                            ),
-                          ),
-                          SizedBox(height: 16),
-                        ],
-                        
-                        Text(
-                          widget.post.content,
-                          style: TextStyle(
-                            fontSize: 16,
-                            height: 1.5,
-                          ),
-                        ),
-                        SizedBox(height: 20),
-                        
-                        // 좋아요/댓글 버튼
-                        Row(
-                          children: [
-                            InkWell(
-                              onTap: _toggleLike,
-                              child: Row(
-                                children: [
-                                  Icon(
-                                    isLiked ? Icons.thumb_up : Icons.thumb_up_outlined,
-                                    color: isLiked ? Colors.blue : Colors.grey[600],
-                                    size: 20,
-                                  ),
-                                  SizedBox(width: 4),
-                                  Text(
-                                    '$likeCount',
-                                    style: TextStyle(
-                                      color: isLiked ? Colors.blue : Colors.grey[600],
-                                      fontWeight: FontWeight.bold,
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ),
-                            SizedBox(width: 20),
+                            SizedBox(height: 8),
                             Row(
                               children: [
-                                Icon(Icons.comment_outlined, color: Colors.grey[600], size: 20),
-                                SizedBox(width: 4),
                                 Text(
-                                  '${comments.length}',
-                                  style: TextStyle(color: Colors.grey[600]),
+                                  post.author,
+                                  style: TextStyle(
+                                    color: Colors.grey[600],
+                                    fontSize: 14,
+                                  ),
+                                ),
+                                SizedBox(width: 8),
+                                Text(
+                                  _formatDateTime(post.createdAt),
+                                  style: TextStyle(
+                                    color: Colors.grey[500],
+                                    fontSize: 12,
+                                  ),
+                                ),
+                              ],
+                            ),
+                            SizedBox(height: 20),
+                            
+                            // 이미지가 있다면 표시
+                            if (post.imageUrl != null) ...[
+                              Container(
+                                width: double.infinity,
+                                height: 200,
+                                decoration: BoxDecoration(
+                                  color: Colors.grey[200],
+                                  borderRadius: BorderRadius.circular(8),
+                                ),
+                                child: Icon(
+                                  Icons.image,
+                                  size: 50,
+                                  color: Colors.grey[400],
+                                ),
+                              ),
+                              SizedBox(height: 16),
+                            ],
+                            
+                            Text(
+                              post.content,
+                              style: TextStyle(
+                                fontSize: 16,
+                                height: 1.5,
+                              ),
+                            ),
+                            SizedBox(height: 20),
+                            
+                            // 좋아요/댓글 버튼
+                            Row(
+                              children: [
+                                InkWell(
+                                  onTap: _toggleLike,
+                                  child: Row(
+                                    children: [
+                                      Icon(
+                                        isLiked ? Icons.thumb_up : Icons.thumb_up_outlined,
+                                        color: isLiked ? Colors.blue : Colors.grey[600],
+                                        size: 20,
+                                      ),
+                                      SizedBox(width: 4),
+                                      Text(
+                                        '$likeCount',
+                                        style: TextStyle(
+                                          color: isLiked ? Colors.blue : Colors.grey[600],
+                                          fontWeight: FontWeight.bold,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                                SizedBox(width: 20),
+                                Row(
+                                  children: [
+                                    Icon(Icons.comment_outlined, color: Colors.grey[600], size: 20),
+                                    SizedBox(width: 4),
+                                    Text(
+                                      '${comments.length}',
+                                      style: TextStyle(color: Colors.grey[600]),
+                                    ),
+                                  ],
                                 ),
                               ],
                             ),
                           ],
                         ),
-                      ],
-                    ),
-                  ),
-                  
-                  Divider(thickness: 8, color: Colors.grey[100]),
-                  
-                  // 댓글 섹션
-                  Container(
-                    padding: EdgeInsets.symmetric(horizontal: 20, vertical: 16),
-                    child: Text(
-                      '댓글 ${comments.length}개',
-                      style: TextStyle(
-                        fontSize: 16,
-                        fontWeight: FontWeight.bold,
                       ),
-                    ),
-                  ),
-                  
-                  // 댓글 리스트
-                  ListView.builder(
-                    shrinkWrap: true,
-                    physics: NeverScrollableScrollPhysics(),
-                    itemCount: comments.length,
-                    itemBuilder: (context, index) {
-                      final comment = comments[index];
-                      return _buildCommentItem(comment);
-                    },
-                  ),
-                  
-                  SizedBox(height: 100), // 댓글 입력창 공간 확보
-                ],
-              ),
-            ),
-          ),
-          
-          // 댓글 입력창
-          Container(
-            padding: EdgeInsets.all(16),
-            decoration: BoxDecoration(
-              color: Colors.white,
-              border: Border(top: BorderSide(color: Colors.grey.shade200)),
-            ),
-            child: SafeArea(
-              child: Row(
-                children: [
-                  Expanded(
-                    child: TextField(
-                      controller: _commentController,
-                      decoration: InputDecoration(
-                        hintText: '댓글을 입력하세요...',
-                        border: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(20),
-                          borderSide: BorderSide(color: Colors.grey.shade300),
+                      
+                      Divider(thickness: 8, color: Colors.grey[100]),
+                      
+                      // 댓글 섹션
+                      Container(
+                        padding: EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+                        child: Text(
+                          '댓글 ${comments.length}개',
+                          style: TextStyle(
+                            fontSize: 16,
+                            fontWeight: FontWeight.bold,
+                          ),
                         ),
-                        contentPadding: EdgeInsets.symmetric(horizontal: 16, vertical: 8),
                       ),
-                      maxLines: null,
-                    ),
+                      
+                      // 댓글 리스트
+                      if (comments.isEmpty)
+                        Container(
+                          padding: EdgeInsets.all(40),
+                          child: Center(
+                            child: Column(
+                              children: [
+                                Icon(Icons.comment_outlined, size: 48, color: Colors.grey[400]),
+                                SizedBox(height: 16),
+                                Text(
+                                  '아직 댓글이 없습니다.',
+                                  style: TextStyle(color: Colors.grey[600]),
+                                ),
+                                SizedBox(height: 8),
+                                Text(
+                                  '첫 번째 댓글을 작성해보세요!',
+                                  style: TextStyle(color: Colors.grey[500], fontSize: 14),
+                                ),
+                              ],
+                            ),
+                          ),
+                        )
+                      else
+                        ListView.builder(
+                          shrinkWrap: true,
+                          physics: NeverScrollableScrollPhysics(),
+                          itemCount: comments.length,
+                          itemBuilder: (context, index) {
+                            final comment = comments[index];
+                            return _buildCommentItem(comment);
+                          },
+                        ),
+                      
+                      SizedBox(height: 100), // 댓글 입력창 공간 확보
+                    ],
                   ),
-                  SizedBox(width: 8),
-                  CircleAvatar(
-                    backgroundColor: Colors.blue,
-                    child: IconButton(
-                      icon: Icon(Icons.send, color: Colors.white, size: 20),
-                      onPressed: _addComment,
-                    ),
-                  ),
-                ],
+                ),
               ),
-            ),
-          ),
-        ],
+              
+              // 댓글 입력창
+              Container(
+                padding: EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  border: Border(top: BorderSide(color: Colors.grey.shade200)),
+                ),
+                child: SafeArea(
+                  child: Column(
+                    children: [
+                      // 닉네임 입력
+                      TextField(
+                        controller: _authorController,
+                        decoration: InputDecoration(
+                          hintText: '닉네임을 입력하세요',
+                          border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(8),
+                            borderSide: BorderSide(color: Colors.grey.shade300),
+                          ),
+                          contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                          isDense: true,
+                        ),
+                      ),
+                      SizedBox(height: 8),
+                      // 댓글 입력
+                      Row(
+                        children: [
+                          Expanded(
+                            child: TextField(
+                              controller: _commentController,
+                              decoration: InputDecoration(
+                                hintText: '댓글을 입력하세요...',
+                                border: OutlineInputBorder(
+                                  borderRadius: BorderRadius.circular(20),
+                                  borderSide: BorderSide(color: Colors.grey.shade300),
+                                ),
+                                contentPadding: EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                              ),
+                              maxLines: null,
+                            ),
+                          ),
+                          SizedBox(width: 8),
+                          CircleAvatar(
+                            backgroundColor: Colors.blue,
+                            child: IconButton(
+                              icon: Icon(Icons.send, color: Colors.white, size: 20),
+                              onPressed: _addComment,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ],
+          );
+        },
       ),
     );
   }
@@ -342,7 +427,7 @@ class _PostDetailScreenState extends State<PostDetailScreen> {
                   children: [
                     InkWell(
                       onTap: () {
-                        // 댓글 좋아요 기능
+                        // 댓글 좋아요 기능 (향후 구현)
                       },
                       child: Row(
                         children: [
@@ -350,16 +435,6 @@ class _PostDetailScreenState extends State<PostDetailScreen> {
                           SizedBox(width: 4),
                           Text('${comment.likes}', style: TextStyle(fontSize: 12, color: Colors.grey[500])),
                         ],
-                      ),
-                    ),
-                    SizedBox(width: 16),
-                    InkWell(
-                      onTap: () {
-                        // 답글 기능
-                      },
-                      child: Text(
-                        '답글',
-                        style: TextStyle(fontSize: 12, color: Colors.grey[500]),
                       ),
                     ),
                   ],
@@ -375,6 +450,7 @@ class _PostDetailScreenState extends State<PostDetailScreen> {
   @override
   void dispose() {
     _commentController.dispose();
+    _authorController.dispose();
     super.dispose();
   }
 }

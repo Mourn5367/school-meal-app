@@ -1,7 +1,9 @@
 // frontend/lib/screens/meal_board_screen.dart
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 import '../models/meal_model.dart';
 import '../models/post_model.dart';
+import '../services/api_service.dart';
 import 'post_detail_screen.dart';
 import 'package:intl/intl.dart';
 import 'post_create_screen.dart';
@@ -22,45 +24,36 @@ class MealBoardScreen extends StatefulWidget {
 }
 
 class _MealBoardScreenState extends State<MealBoardScreen> {
-  List<Post> posts = [];
+  late Future<List<Post>> _postsFuture;
 
   @override
   void initState() {
     super.initState();
-    _loadDummyPosts();
+    _loadPosts();
   }
 
-  void _loadDummyPosts() {
-    // 더미 게시글 데이터 (실제로는 API에서 가져올 것)
-    posts = [
-      Post(
-        id: 1,
-        title: "오늘 아침 토스트 넘로웠어요",
-        content: "오늘 아침 토스트가 너무 따뜻했어요. 쫄 더 신경써주셨으면 좋겠습니다.",
-        author: "user1",
-        createdAt: DateTime.now().subtract(Duration(hours: 2)),
-        likes: 5,
-        commentCount: 2,
-      ),
-      Post(
-        id: 2,
-        title: "오늘 점심 비빔밥 맛있었어요!",
-        content: "오늘 점심에 나온 비빔밥이 정말 맛있었습니다. 특히 고추장이 잘 어울렸어요. 밥도 적당히 고슬고슬하고 나물들도 신선했습니다. 다음에도 또 나왔으면 좋겠어요!",
-        author: "user2",
-        createdAt: DateTime.now().subtract(Duration(hours: 5)),
-        likes: 15,
-        commentCount: 3,
-      ),
-      Post(
-        id: 3,
-        title: "샐러드 드레싱 추천해주세요",
-        content: "오늘 샐러드가 좀 심심했는데, 어떤 드레싱이 잘 어울릴까요?",
-        author: "user3",
-        createdAt: DateTime.now().subtract(Duration(hours: 1)),
-        likes: 3,
-        commentCount: 1,
-      ),
-    ];
+  void _loadPosts() {
+    setState(() {
+      _postsFuture = _fetchPosts();
+    });
+  }
+
+  Future<List<Post>> _fetchPosts() async {
+    try {
+      final apiService = Provider.of<ApiService>(context, listen: false);
+      
+      // 날짜를 API 형식으로 변환
+      final formattedDate = DateUtilsCustom.DateUtils.formatToApiDate(widget.date);
+      
+      print('게시글 조회 - 날짜: $formattedDate, 식사: ${widget.meal.mealType}');
+      
+      final posts = await apiService.getPosts(formattedDate, widget.meal.mealType);
+      return posts;
+    } catch (e) {
+      print('게시글 로드 오류: $e');
+      // 오류 발생 시 빈 리스트 반환
+      return [];
+    }
   }
 
   Color _getMealTypeColor(String mealType) {
@@ -176,12 +169,18 @@ class _MealBoardScreenState extends State<MealBoardScreen> {
                   child: Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
-                      Text(
-                        '게시글 ${posts.length}개',
-                        style: TextStyle(
-                          fontSize: 16,
-                          fontWeight: FontWeight.bold,
-                        ),
+                      FutureBuilder<List<Post>>(
+                        future: _postsFuture,
+                        builder: (context, snapshot) {
+                          final count = snapshot.hasData ? snapshot.data!.length : 0;
+                          return Text(
+                            '게시글 ${count}개',
+                            style: TextStyle(
+                              fontSize: 16,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          );
+                        },
                       ),
                       ElevatedButton.icon(
                         onPressed: () {
@@ -190,12 +189,13 @@ class _MealBoardScreenState extends State<MealBoardScreen> {
                             MaterialPageRoute(
                               builder: (context) => PostCreateScreen(
                                 meal: widget.meal,
-                                date: widget.date, // 원본 날짜 전달
+                                date: widget.date,
                               ),
                             ),
                           ).then((result) {
                             if (result == true) {
-                              _loadDummyPosts(); // API로 전환 시 실제 로직으로 교체
+                              // 게시글 작성 후 새로고침
+                              _loadPosts();
                             }
                           });
                         },
@@ -210,11 +210,81 @@ class _MealBoardScreenState extends State<MealBoardScreen> {
                   ),
                 ),
                 Expanded(
-                  child: ListView.builder(
-                    itemCount: posts.length,
-                    itemBuilder: (context, index) {
-                      final post = posts[index];
-                      return _buildPostCard(post);
+                  child: FutureBuilder<List<Post>>(
+                    future: _postsFuture,
+                    builder: (context, snapshot) {
+                      if (snapshot.connectionState == ConnectionState.waiting) {
+                        return Center(child: CircularProgressIndicator());
+                      } else if (snapshot.hasError) {
+                        return Center(
+                          child: Column(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              Icon(Icons.error_outline, size: 48, color: Colors.red),
+                              SizedBox(height: 16),
+                              Text(
+                                '게시글을 불러올 수 없습니다.',
+                                style: TextStyle(fontSize: 16),
+                              ),
+                              SizedBox(height: 8),
+                              Text(
+                                '${snapshot.error}',
+                                style: TextStyle(fontSize: 12, color: Colors.grey[600]),
+                                textAlign: TextAlign.center,
+                              ),
+                              SizedBox(height: 16),
+                              ElevatedButton(
+                                onPressed: _loadPosts,
+                                child: Text('다시 시도'),
+                              ),
+                            ],
+                          ),
+                        );
+                      } else if (!snapshot.hasData || snapshot.data!.isEmpty) {
+                        return Center(
+                          child: Column(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              Icon(
+                                Icons.article_outlined,
+                                size: 64,
+                                color: Colors.grey[400],
+                              ),
+                              SizedBox(height: 16),
+                              Text(
+                                '아직 게시글이 없습니다.',
+                                style: TextStyle(
+                                  fontSize: 18,
+                                  fontWeight: FontWeight.bold,
+                                  color: Colors.grey[600],
+                                ),
+                              ),
+                              SizedBox(height: 8),
+                              Text(
+                                '첫 번째 게시글을 작성해보세요!',
+                                style: TextStyle(
+                                  fontSize: 14,
+                                  color: Colors.grey[500],
+                                ),
+                              ),
+                            ],
+                          ),
+                        );
+                      } else {
+                        final posts = snapshot.data!;
+                        return RefreshIndicator(
+                          onRefresh: () async {
+                            _loadPosts();
+                          },
+                          child: ListView.builder(
+                            itemCount: posts.length,
+                            itemBuilder: (context, index) {
+                              final post = posts[index];
+                              return _buildPostCard(post);
+                            },
+                          ),
+                        );
+                      }
                     },
                   ),
                 ),
@@ -274,7 +344,7 @@ class _MealBoardScreenState extends State<MealBoardScreen> {
                   ),
                   SizedBox(width: 8),
                   Text(
-                    DateFormat('HH:mm').format(post.createdAt),
+                    _formatDateTime(post.createdAt),
                     style: TextStyle(
                       fontSize: 12,
                       color: Colors.grey[500],
@@ -299,5 +369,20 @@ class _MealBoardScreenState extends State<MealBoardScreen> {
         ),
       ),
     );
+  }
+
+  String _formatDateTime(DateTime dateTime) {
+    final now = DateTime.now();
+    final difference = now.difference(dateTime);
+
+    if (difference.inMinutes < 60) {
+      return '${difference.inMinutes}분 전';
+    } else if (difference.inHours < 24) {
+      return '${difference.inHours}시간 전';
+    } else if (difference.inDays < 7) {
+      return '${difference.inDays}일 전';
+    } else {
+      return DateFormat('MM-dd HH:mm').format(dateTime);
+    }
   }
 }

@@ -5,6 +5,7 @@ import '../config/api_config.dart';
 import '../models/meal_model.dart';
 import '../models/post_model.dart';
 import '../models/comment_model.dart';
+import '../utils/date_utils.dart' as DateUtilsCustom;
 
 class ApiService {
   // 기존 메뉴 관련 API

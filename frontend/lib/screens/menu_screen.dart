@@ -5,6 +5,7 @@ import '../services/api_service.dart';
 import '../models/meal_model.dart';
 import 'meal_board_screen.dart';
 import 'package:intl/intl.dart';
+import '../utils/date_utils.dart' as DateUtilsCustom;
 
 class MenuScreen extends StatefulWidget {
   @override
@@ -20,43 +21,6 @@ class _MenuScreenState extends State<MenuScreen> {
     _weeklyMealsFuture = _loadWeeklyMeals();
   }
   
-  // RFC 2822 형식 날짜를 파싱하는 함수
-  DateTime? _parseDate(String dateStr) {
-    try {
-      // 기본 ISO 형식 시도 (yyyy-MM-dd)
-      if (dateStr.contains('-') && !dateStr.contains(',')) {
-        return DateTime.parse(dateStr);
-      }
-      
-      // RFC 2822 형식 파싱 (예: "Sat, 31 May 2025 00:00:00 GMT")
-      if (dateStr.contains(',')) {
-        // RFC 2822 형식을 직접 파싱
-        final parts = dateStr.split(' ');
-        if (parts.length >= 4) {
-          final day = int.tryParse(parts[1]);
-          final monthStr = parts[2];
-          final year = int.tryParse(parts[3]);
-          
-          final monthMap = {
-            'Jan': 1, 'Feb': 2, 'Mar': 3, 'Apr': 4, 'May': 5, 'Jun': 6,
-            'Jul': 7, 'Aug': 8, 'Sep': 9, 'Oct': 10, 'Nov': 11, 'Dec': 12
-          };
-          
-          final month = monthMap[monthStr];
-          
-          if (day != null && month != null && year != null) {
-            return DateTime(year, month, day);
-          }
-        }
-      }
-      
-      return null;
-    } catch (e) {
-      print('날짜 파싱 실패: $dateStr - $e');
-      return null;
-    }
-  }
-  
   Future<Map<String, List<Meal>>> _loadWeeklyMeals() async {
     final apiService = Provider.of<ApiService>(context, listen: false);
     final meals = await apiService.getMeals();
@@ -66,7 +30,7 @@ class _MenuScreenState extends State<MenuScreen> {
     
     // 현재 날짜 이후의 메뉴만 필터링하고, 주말(토, 일) 제외
     final filteredMeals = meals.where((meal) {
-      final mealDate = _parseDate(meal.date);
+      final mealDate = DateUtilsCustom.DateUtils.parseDate(meal.date);
       if (mealDate == null) return false;
       
       final isWeekend = mealDate.weekday == 6 || mealDate.weekday == 7;
@@ -78,7 +42,7 @@ class _MenuScreenState extends State<MenuScreen> {
     // 날짜별로 그룹화 (날짜를 키로 사용하기 위해 YYYY-MM-DD 형식으로 변환)
     Map<String, List<Meal>> groupedMeals = {};
     for (var meal in filteredMeals) {
-      final mealDate = _parseDate(meal.date);
+      final mealDate = DateUtilsCustom.DateUtils.parseDate(meal.date);
       if (mealDate != null) {
         final dateKey = DateFormat('yyyy-MM-dd').format(mealDate);
         if (!groupedMeals.containsKey(dateKey)) {
