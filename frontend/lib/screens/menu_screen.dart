@@ -1,8 +1,10 @@
+// frontend/lib/screens/menu_screen.dart
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../services/api_service.dart';
 import '../models/meal_model.dart';
 import '../widgets/meal_card.dart';
+import 'package:intl/intl.dart';
 
 class MenuScreen extends StatefulWidget {
   @override
@@ -19,10 +21,28 @@ class _MenuScreenState extends State<MenuScreen> {
     _mealsFuture = _loadMeals();
   }
   
-  Future<List<Meal>> _loadMeals() async {
-    final apiService = Provider.of<ApiService>(context, listen: false);
-    return apiService.getMeals();
-  }
+ Future<List<Meal>> _loadMeals() async {
+  final apiService = Provider.of<ApiService>(context, listen: false);
+  final meals = await apiService.getMeals();
+  
+  // 현재 날짜 구하기
+  final today = DateTime.now();
+  final todayStr = DateFormat('yyyy-MM-dd').format(today);
+  
+  // 현재 날짜 이후의 메뉴만 필터링하고, 주말(토, 일) 제외
+  final filteredMeals = meals.where((meal) {
+    // 날짜 형식 변환
+    final mealDate = DateTime.parse(meal.date);
+    
+    // 주말 체크 (6: 토요일, 7: 일요일)
+    final isWeekend = mealDate.weekday == 6 || mealDate.weekday == 7;
+    
+    // 오늘 이후의 날짜이며 주말이 아닌 경우만 포함
+    return meal.date.compareTo(todayStr) >= 0 && !isWeekend;
+  }).toList();
+  
+  return filteredMeals;
+}
   
   @override
   Widget build(BuildContext context) {
@@ -62,7 +82,7 @@ class _MenuScreenState extends State<MenuScreen> {
                     ),
                   );
                 } else if (!snapshot.hasData || snapshot.data!.isEmpty) {
-                  return Center(child: Text('메뉴 정보가 없습니다.'));
+                  return Center(child: Text('현재 및 향후 메뉴 정보가 없습니다.'));
                 } else {
                   final meals = snapshot.data!;
                   final filteredMeals = _selectedMealType == '전체'

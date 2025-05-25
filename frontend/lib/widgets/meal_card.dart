@@ -10,7 +10,15 @@ class MealCard extends StatelessWidget {
   String _formatDate(String dateStr) {
     try {
       final date = DateTime.parse(dateStr);
-      return DateFormat('yyyy년 MM월 dd일').format(date);
+      
+      // 요일 배열 (영어 -> 한글)
+      final weekdays = ['월', '화', '수', '목', '금', '토', '일'];
+      
+      // 요일 구하기 (1: 월요일, 7: 일요일이므로 -1 해줌)
+      final weekday = weekdays[date.weekday - 1];
+      
+      // 'yyyy년 MM월 dd일 (요일)' 형식으로 변환
+      return '${date.year}년 ${date.month}월 ${date.day}일 ($weekday)';
     } catch (e) {
       return dateStr;
     }
