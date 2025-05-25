@@ -244,260 +244,299 @@ class _PostCreateScreenState extends State<PostCreateScreen> {
     }
   }
 
-  @override
-Widget build(BuildContext context) {
-  return Scaffold(
-    appBar: AppBar(
-      title: Text('게시글 작성'),
-      elevation: 0,
-      actions: [
-        TextButton(
-          onPressed: _isLoading ? null : _savePost,
-          child: Container(
-            padding: EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-            decoration: BoxDecoration(
-              color: _isLoading ? Colors.grey : Colors.blue,
-              borderRadius: BorderRadius.circular(20),
+  // 개선된 이미지 미리보기 위젯
+  Widget _buildImagePreview() {
+    if (_selectedImage == null) return SizedBox.shrink();
+
+    return Container(
+      width: double.infinity,
+      margin: EdgeInsets.symmetric(vertical: 16),
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(12),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.grey.withOpacity(0.2),
+            spreadRadius: 1,
+            blurRadius: 4,
+            offset: Offset(0, 2),
+          ),
+        ],
+      ),
+      child: Column(
+        children: [
+          ClipRRect(
+            borderRadius: BorderRadius.circular(12),
+            child: LayoutBuilder(
+              builder: (context, constraints) {
+                return Image.file(
+                  _selectedImage!,
+                  fit: BoxFit.scaleDown, // 이미지가 작으면 원본 크기, 크면 축소
+                  alignment: Alignment.center,
+                  errorBuilder: (context, error, stackTrace) {
+                    return Container(
+                      height: 200,
+                      decoration: BoxDecoration(
+                        color: Colors.grey[100],
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(color: Colors.grey.shade300),
+                      ),
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Icon(
+                            Icons.broken_image_outlined, 
+                            size: 48, 
+                            color: Colors.grey[400]
+                          ),
+                          SizedBox(height: 8),
+                          Text(
+                            '이미지를 불러올 수 없습니다',
+                            style: TextStyle(
+                              color: Colors.grey[600],
+                              fontSize: 14,
+                            ),
+                          ),
+                        ],
+                      ),
+                    );
+                  },
+                );
+              },
             ),
-            child: Text(
-              _isLoading ? '작성 중...' : '등록',
-              style: TextStyle(
-                color: Colors.white,
-                fontWeight: FontWeight.bold,
+          ),
+          SizedBox(height: 8),
+          Center(
+            child: Container(
+              padding: EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+              decoration: BoxDecoration(
+                color: Colors.green.withOpacity(0.1),
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(Icons.check_circle, size: 16, color: Colors.green),
+                  SizedBox(width: 4),
+                  Text(
+                    '이미지가 선택되었습니다',
+                    style: TextStyle(
+                      color: Colors.green,
+                      fontSize: 12,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                ],
               ),
             ),
           ),
-        ),
-      ],
-    ),
-    body: _isLoading
-        ? Center(
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                CircularProgressIndicator(),
-                SizedBox(height: 16),
-                Text('게시글을 작성 중입니다...'),
-                if (_selectedImage != null) ...[
-                  SizedBox(height: 8),
-                  Text('이미지 업로드 중...', style: TextStyle(color: Colors.grey[600])),
-                ],
-              ],
+        ],
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(
+        title: Text('게시글 작성'),
+        elevation: 0,
+        actions: [
+          TextButton(
+            onPressed: _isLoading ? null : _savePost,
+            child: Container(
+              padding: EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+              decoration: BoxDecoration(
+                color: _isLoading ? Colors.grey : Colors.blue,
+                borderRadius: BorderRadius.circular(20),
+              ),
+              child: Text(
+                _isLoading ? '작성 중...' : '등록',
+                style: TextStyle(
+                  color: Colors.white,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
             ),
-          )
-        : Form(
-            key: _formKey,
-            child: Padding(
-              padding: const EdgeInsets.all(16.0),
+          ),
+        ],
+      ),
+      body: _isLoading
+          ? Center(
               child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  // 메뉴 정보 표시 부분은 동일하게 유지
-                  Container(
-                    padding: EdgeInsets.all(16),
-                    decoration: BoxDecoration(
-                      gradient: LinearGradient(
-                        colors: [
-                          _getMealTypeColor(widget.meal.mealType).withOpacity(0.1),
-                          _getMealTypeColor(widget.meal.mealType).withOpacity(0.05),
-                        ],
-                      ),
-                      borderRadius: BorderRadius.circular(12),
-                      border: Border.all(
-                        color: _getMealTypeColor(widget.meal.mealType).withOpacity(0.3),
-                      ),
-                    ),
-                    child: Row(
-                      children: [
-                        Container(
-                          padding: EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                          decoration: BoxDecoration(
-                            color: _getMealTypeColor(widget.meal.mealType),
-                            borderRadius: BorderRadius.circular(20),
-                          ),
-                          child: Text(
-                            widget.meal.mealType,
-                            style: TextStyle(
-                              color: Colors.white,
-                              fontSize: 12,
-                              fontWeight: FontWeight.bold,
-                            ),
-                          ),
-                        ),
-                        SizedBox(width: 12),
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                '${DateUtilsCustom.DateUtils.formatForDisplay(widget.date)} 메뉴',
-                                style: TextStyle(
-                                  fontSize: 16,
-                                  fontWeight: FontWeight.bold,
-                                ),
-                              ),
-                              SizedBox(height: 4),
-                              Text(
-                                '${widget.meal.mealType}에 대한 게시글을 작성합니다',
-                                style: TextStyle(
-                                  fontSize: 12, 
-                                  color: Colors.grey[600]
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                  SizedBox(height: 20),
-                  
-                  // 제목 입력
-                  TextFormField(
-                    controller: _titleController,
-                    decoration: InputDecoration(
-                      labelText: '제목',
-                      border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                      filled: true,
-                      fillColor: Colors.grey[50],
-                      prefixIcon: Icon(Icons.title),
-                    ),
-                    validator: (value) {
-                      if (value == null || value.isEmpty) {
-                        return '제목을 입력해주세요';
-                      }
-                      return null;
-                    },
-                  ),
+                  CircularProgressIndicator(),
                   SizedBox(height: 16),
-                  
-                  // 닉네임 입력
-                  TextFormField(
-                    controller: _authorController,
-                    decoration: InputDecoration(
-                      labelText: '닉네임',
-                      border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                      filled: true,
-                      fillColor: Colors.grey[50],
-                      prefixIcon: Icon(Icons.person),
-                    ),
-                    validator: (value) {
-                      if (value == null || value.isEmpty) {
-                        return '닉네임을 입력해주세요';
-                      }
-                      return null;
-                    },
-                  ),
-                  SizedBox(height: 20),
-                  
-                  // 개선된 이미지 선택 및 미리보기
+                  Text('게시글을 작성 중입니다...'),
                   if (_selectedImage != null) ...[
-                    Container(
-                      width: double.infinity,
-                      decoration: BoxDecoration(
-                        borderRadius: BorderRadius.circular(12),
-                        boxShadow: [
-                          BoxShadow(
-                            color: Colors.grey.withOpacity(0.3),
-                            spreadRadius: 2,
-                            blurRadius: 8,
-                            offset: Offset(0, 2),
-                          ),
-                        ],
-                      ),
-                      child: ClipRRect(
-                        borderRadius: BorderRadius.circular(12),
-                        child: AspectRatio(
-                          aspectRatio: 4 / 3,  // 4:3 비율로 설정
-                          child: Image.file(
-                            _selectedImage!,
-                            fit: BoxFit.contain,  // 이미지 비율 유지하면서 컨테이너에 맞추기
-                          ),
-                        ),
-                      ),
-                    ),
                     SizedBox(height: 8),
-                    Center(
-                      child: Container(
-                        padding: EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                        decoration: BoxDecoration(
-                          color: Colors.green.withOpacity(0.1),
-                          borderRadius: BorderRadius.circular(12),
+                    Text('이미지 업로드 중...', style: TextStyle(color: Colors.grey[600])),
+                  ],
+                ],
+              ),
+            )
+          : Form(
+              key: _formKey,
+              child: Padding(
+                padding: const EdgeInsets.all(16.0),
+                child: Column(
+                  children: [
+                    // 메뉴 정보 표시
+                    Container(
+                      padding: EdgeInsets.all(16),
+                      decoration: BoxDecoration(
+                        gradient: LinearGradient(
+                          colors: [
+                            _getMealTypeColor(widget.meal.mealType).withOpacity(0.1),
+                            _getMealTypeColor(widget.meal.mealType).withOpacity(0.05),
+                          ],
                         ),
-                        child: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Icon(Icons.check_circle, size: 16, color: Colors.green),
-                            SizedBox(width: 4),
-                            Text(
-                              '이미지가 선택되었습니다',
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(
+                          color: _getMealTypeColor(widget.meal.mealType).withOpacity(0.3),
+                        ),
+                      ),
+                      child: Row(
+                        children: [
+                          Container(
+                            padding: EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                            decoration: BoxDecoration(
+                              color: _getMealTypeColor(widget.meal.mealType),
+                              borderRadius: BorderRadius.circular(20),
+                            ),
+                            child: Text(
+                              widget.meal.mealType,
                               style: TextStyle(
-                                color: Colors.green,
+                                color: Colors.white,
                                 fontSize: 12,
                                 fontWeight: FontWeight.bold,
                               ),
                             ),
-                          ],
-                        ),
+                          ),
+                          SizedBox(width: 12),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  '${DateUtilsCustom.DateUtils.formatForDisplay(widget.date)} 메뉴',
+                                  style: TextStyle(
+                                    fontSize: 16,
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                                ),
+                                SizedBox(height: 4),
+                                Text(
+                                  '${widget.meal.mealType}에 대한 게시글을 작성합니다',
+                                  style: TextStyle(
+                                    fontSize: 12, 
+                                    color: Colors.grey[600]
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ],
                       ),
                     ),
-                    SizedBox(height: 12),
-                  ],
-                  
-                  Container(
-                    width: double.infinity,
-                    child: OutlinedButton.icon(
-                      onPressed: _showImagePickerOptions,
-                      icon: Icon(_selectedImage != null ? Icons.edit : Icons.camera_alt),
-                      label: Text(_selectedImage != null ? '이미지 변경' : '이미지 추가'),
-                      style: OutlinedButton.styleFrom(
-                        padding: EdgeInsets.symmetric(vertical: 16),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(12),
-                        ),
-                        side: BorderSide(
-                          color: _selectedImage != null ? Colors.orange : Colors.blue,
-                          width: 2,
-                        ),
-                      ),
-                    ),
-                  ),
-                  SizedBox(height: 20),
-                  
-                  // 내용 입력
-                  Expanded(
-                    child: TextFormField(
-                      controller: _contentController,
+                    SizedBox(height: 20),
+                    
+                    // 제목 입력
+                    TextFormField(
+                      controller: _titleController,
                       decoration: InputDecoration(
-                        labelText: '내용',
-                        alignLabelWithHint: true,
+                        labelText: '제목',
                         border: OutlineInputBorder(
                           borderRadius: BorderRadius.circular(12),
                         ),
                         filled: true,
                         fillColor: Colors.grey[50],
-                        hintText: '메뉴에 대한 후기, 의견 등을 자유롭게 작성해주세요.\n\n예시:\n- 맛은 어땠나요?\n- 양은 충분했나요?\n- 추천하고 싶나요?',
+                        prefixIcon: Icon(Icons.title),
                       ),
-                      maxLines: null,
-                      expands: true,
-                      textAlignVertical: TextAlignVertical.top,
                       validator: (value) {
                         if (value == null || value.isEmpty) {
-                          return '내용을 입력해주세요';
+                          return '제목을 입력해주세요';
                         }
                         return null;
                       },
                     ),
-                  ),
-                ],
+                    SizedBox(height: 16),
+                    
+                    // 닉네임 입력
+                    TextFormField(
+                      controller: _authorController,
+                      decoration: InputDecoration(
+                        labelText: '닉네임',
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        filled: true,
+                        fillColor: Colors.grey[50],
+                        prefixIcon: Icon(Icons.person),
+                      ),
+                      validator: (value) {
+                        if (value == null || value.isEmpty) {
+                          return '닉네임을 입력해주세요';
+                        }
+                        return null;
+                      },
+                    ),
+                    SizedBox(height: 20),
+                    
+                    // 개선된 이미지 미리보기
+                    _buildImagePreview(),
+                    
+                    Container(
+                      width: double.infinity,
+                      child: OutlinedButton.icon(
+                        onPressed: _showImagePickerOptions,
+                        icon: Icon(_selectedImage != null ? Icons.edit : Icons.camera_alt),
+                        label: Text(_selectedImage != null ? '이미지 변경' : '이미지 추가'),
+                        style: OutlinedButton.styleFrom(
+                          padding: EdgeInsets.symmetric(vertical: 16),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          side: BorderSide(
+                            color: _selectedImage != null ? Colors.orange : Colors.blue,
+                            width: 2,
+                          ),
+                        ),
+                      ),
+                    ),
+                    SizedBox(height: 20),
+                    
+                    // 내용 입력
+                    Expanded(
+                      child: TextFormField(
+                        controller: _contentController,
+                        decoration: InputDecoration(
+                          labelText: '내용',
+                          alignLabelWithHint: true,
+                          border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          filled: true,
+                          fillColor: Colors.grey[50],
+                          hintText: '메뉴에 대한 후기, 의견 등을 자유롭게 작성해주세요.\n\n예시:\n- 맛은 어땠나요?\n- 양은 충분했나요?\n- 추천하고 싶나요?',
+                        ),
+                        maxLines: null,
+                        expands: true,
+                        textAlignVertical: TextAlignVertical.top,
+                        validator: (value) {
+                          if (value == null || value.isEmpty) {
+                            return '내용을 입력해주세요';
+                          }
+                          return null;
+                        },
+                      ),
+                    ),
+                  ],
+                ),
               ),
             ),
-          ),
-  );
-}
+    );
+  }
 
   Color _getMealTypeColor(String mealType) {
     switch (mealType) {

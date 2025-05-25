@@ -1,4 +1,4 @@
-// frontend/lib/screens/post_detail_screen.dart
+// frontend/lib/screens/post_create_screen.dart - 이미지 미리보기 개선
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../models/post_model.dart';
@@ -137,6 +137,98 @@ class _PostDetailScreenState extends State<PostDetailScreen> {
     }
   }
 
+  // 이미지 표시를 위한 개선된 위젯
+  Widget _buildImageWidget(String? imageUrl) {
+    if (imageUrl == null) return SizedBox.shrink();
+
+    return Container(
+      width: double.infinity,
+      margin: EdgeInsets.symmetric(vertical: 12),
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(12),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.grey.withOpacity(0.2),
+            spreadRadius: 1,
+            blurRadius: 4,
+            offset: Offset(0, 2),
+          ),
+        ],
+      ),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(12),
+        child: LayoutBuilder(
+          builder: (context, constraints) {
+            return Image.network(
+              '${ApiConfig.baseUrl}$imageUrl',
+              fit: BoxFit.scaleDown, // 이미지가 작으면 원본 크기, 크면 축소
+              alignment: Alignment.center,
+              errorBuilder: (context, error, stackTrace) {
+                return Container(
+                  height: 200,
+                  decoration: BoxDecoration(
+                    color: Colors.grey[100],
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(color: Colors.grey.shade300),
+                  ),
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Icon(
+                        Icons.broken_image_outlined, 
+                        size: 48, 
+                        color: Colors.grey[400]
+                      ),
+                      SizedBox(height: 8),
+                      Text(
+                        '이미지를 불러올 수 없습니다',
+                        style: TextStyle(
+                          color: Colors.grey[600],
+                          fontSize: 14,
+                        ),
+                      ),
+                    ],
+                  ),
+                );
+              },
+              loadingBuilder: (context, child, loadingProgress) {
+                if (loadingProgress == null) return child;
+                return Container(
+                  height: 200,
+                  decoration: BoxDecoration(
+                    color: Colors.grey[50],
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: Center(
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        CircularProgressIndicator(
+                          value: loadingProgress.expectedTotalBytes != null
+                              ? loadingProgress.cumulativeBytesLoaded / 
+                                loadingProgress.expectedTotalBytes!
+                              : null,
+                        ),
+                        SizedBox(height: 12),
+                        Text(
+                          '이미지 로딩 중...',
+                          style: TextStyle(
+                            color: Colors.grey[600],
+                            fontSize: 14,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                );
+              },
+            );
+          },
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -219,53 +311,6 @@ class _PostDetailScreenState extends State<PostDetailScreen> {
                             ),
                             SizedBox(height: 20),
                             
-                            // 이미지가 있다면 표시
-                            if (post.imageUrl != null) ...[
-                              Container(
-                                width: double.infinity,
-                                constraints: BoxConstraints(maxHeight: 300),
-                                decoration: BoxDecoration(
-                                  borderRadius: BorderRadius.circular(8),
-                                  border: Border.all(color: Colors.grey.shade200),
-                                ),
-                                child: ClipRRect(
-                                  borderRadius: BorderRadius.circular(8),
-                                  child: Image.network(
-                                    '${ApiConfig.baseUrl}${post.imageUrl}',
-                                    fit: BoxFit.cover,
-                                    errorBuilder: (context, error, stackTrace) {
-                                      return Container(
-                                        height: 200,
-                                        color: Colors.grey[200],
-                                        child: Column(
-                                          mainAxisAlignment: MainAxisAlignment.center,
-                                          children: [
-                                            Icon(Icons.broken_image, size: 50, color: Colors.grey[400]),
-                                            SizedBox(height: 8),
-                                            Text('이미지를 불러올 수 없습니다', style: TextStyle(color: Colors.grey[600])),
-                                          ],
-                                        ),
-                                      );
-                                    },
-                                    loadingBuilder: (context, child, loadingProgress) {
-                                      if (loadingProgress == null) return child;
-                                      return Container(
-                                        height: 200,
-                                        child: Center(
-                                          child: CircularProgressIndicator(
-                                            value: loadingProgress.expectedTotalBytes != null
-                                                ? loadingProgress.cumulativeBytesLoaded / loadingProgress.expectedTotalBytes!
-                                                : null,
-                                          ),
-                                        ),
-                                      );
-                                    },
-                                  ),
-                                ),
-                              ),
-                              SizedBox(height: 16),
-                            ],
-                            
                             Text(
                               post.content,
                               style: TextStyle(
@@ -273,6 +318,10 @@ class _PostDetailScreenState extends State<PostDetailScreen> {
                                 height: 1.5,
                               ),
                             ),
+                            
+                            // 개선된 이미지 표시
+                            _buildImageWidget(post.imageUrl),
+                            
                             SizedBox(height: 20),
                             
                             // 좋아요/댓글 버튼
