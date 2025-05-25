@@ -1,10 +1,10 @@
 -- database/init.sql
+-- 기존 테이블들
 CREATE TABLE IF NOT EXISTS meal_menu (
     id SERIAL PRIMARY KEY,
     date DATE NOT NULL,
     meal_type VARCHAR(10) NOT NULL,
     content TEXT NOT NULL,
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     UNIQUE(date, meal_type)
 );
 
@@ -25,22 +25,28 @@ CREATE TABLE IF NOT EXISTS comments (
     post_id INTEGER REFERENCES posts(id) ON DELETE CASCADE,
     content TEXT NOT NULL,
     author VARCHAR(100) NOT NULL,
-    likes INTEGER DEFAULT 0,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
 CREATE TABLE IF NOT EXISTS post_likes (
     id SERIAL PRIMARY KEY,
     post_id INTEGER REFERENCES posts(id) ON DELETE CASCADE,
-    user_identifier VARCHAR(100) NOT NULL,
+    user_identifier VARCHAR(255) NOT NULL,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     UNIQUE(post_id, user_identifier)
 );
 
--- 샘플 데이터 추가
-INSERT INTO meal_menu (date, meal_type, content)
-VALUES 
-    (CURRENT_DATE, '아침', '토스트, 계란프라이, 우유, 샐러드'),
-    (CURRENT_DATE, '점심', '비빔밥, 된장국, 김치, 단무지'),
-    (CURRENT_DATE, '저녁', '돈까스, 미역국, 김치, 샐러드')
-ON CONFLICT (date, meal_type) DO NOTHING;
+-- 새로 추가된 댓글 좋아요 테이블
+CREATE TABLE IF NOT EXISTS comment_likes (
+    id SERIAL PRIMARY KEY,
+    comment_id INTEGER REFERENCES comments(id) ON DELETE CASCADE,
+    user_identifier VARCHAR(255) NOT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE(comment_id, user_identifier)
+);
+
+-- 인덱스 추가
+CREATE INDEX IF NOT EXISTS idx_posts_meal_date_type ON posts(meal_date, meal_type);
+CREATE INDEX IF NOT EXISTS idx_comments_post_id ON comments(post_id);
+CREATE INDEX IF NOT EXISTS idx_post_likes_post_id ON post_likes(post_id);
+CREATE INDEX IF NOT EXISTS idx_comment_likes_comment_id ON comment_likes(comment_id);

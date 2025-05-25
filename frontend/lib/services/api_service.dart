@@ -1,5 +1,6 @@
 // frontend/lib/services/api_service.dart - 전체 교체
 import 'dart:convert';
+import 'dart:io';
 import 'package:http/http.dart' as http;
 import '../config/api_config.dart';
 import '../models/meal_model.dart';
@@ -33,6 +34,53 @@ class ApiService {
     } catch (e) {
       print('API 호출 오류: $e');
       throw Exception('네트워크 오류: $e');
+    }
+  }
+
+  // 이미지 업로드 API
+  Future<String> uploadImage(File imageFile) async {
+    try {
+      // Base64로 인코딩하여 전송
+      final bytes = await imageFile.readAsBytes();
+      final base64Image = base64Encode(bytes);
+      final filename = imageFile.path.split('/').last;
+      
+      final response = await http.post(
+        Uri.parse('${ApiConfig.baseUrl}/upload-image-base64'),
+        headers: {
+          'Content-Type': 'application/json',
+          'Accept': 'application/json',
+        },
+        body: json.encode({
+          'image_data': 'data:image/${_getImageExtension(filename)};base64,$base64Image',
+          'filename': filename,
+        }),
+      ).timeout(Duration(seconds: 30));
+
+      if (response.statusCode == 201) {
+        final data = json.decode(response.body);
+        return data['image_url'];
+      } else {
+        throw Exception('이미지 업로드 실패: ${response.statusCode}');
+      }
+    } catch (e) {
+      print('이미지 업로드 오류: $e');
+      throw Exception('이미지 업로드 오류: $e');
+    }
+  }
+
+  String _getImageExtension(String filename) {
+    final ext = filename.split('.').last.toLowerCase();
+    switch (ext) {
+      case 'jpg':
+      case 'jpeg':
+        return 'jpeg';
+      case 'png':
+        return 'png';
+      case 'gif':
+        return 'gif';
+      default:
+        return 'jpeg';
     }
   }
 
@@ -192,6 +240,31 @@ class ApiService {
     } catch (e) {
       print('댓글 작성 API 오류: $e');
       throw Exception('댓글 작성 오류: $e');
+    }
+  }
+
+  // 댓글 좋아요 토글
+  Future<Map<String, dynamic>> toggleCommentLike(int commentId, {String? userIdentifier}) async {
+    try {
+      final response = await http.post(
+        Uri.parse('${ApiConfig.baseUrl}/comments/$commentId/like'),
+        headers: {
+          'Content-Type': 'application/json',
+          'Accept': 'application/json',
+        },
+        body: json.encode({
+          'user_identifier': userIdentifier ?? 'anonymous',
+        }),
+      ).timeout(Duration(seconds: 10));
+
+      if (response.statusCode == 200) {
+        return json.decode(response.body);
+      } else {
+        throw Exception('댓글 좋아요 처리 실패: ${response.statusCode}');
+      }
+    } catch (e) {
+      print('댓글 좋아요 API 오류: $e');
+      throw Exception('댓글 좋아요 처리 오류: $e');
     }
   }
 }

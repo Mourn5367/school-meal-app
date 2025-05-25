@@ -19,6 +19,8 @@ services:
       - db
     environment:
       - DATABASE_URL=postgresql://schoolmeal:securepassword@db:5432/schoolmealdb
+    volumes:
+      - ./backend/uploads:/app/uploads  # 이미지 업로드 폴더 볼륨 추가
 
   frontend:
     build: ./frontend

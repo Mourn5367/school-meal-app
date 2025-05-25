@@ -1,13 +1,31 @@
-# backend/app.py - 기존 코드에 추가할 부분들
-from flask import Flask, jsonify, request
+# backend/app.py - 이미지 URL 수정 버전
+from flask import Flask, jsonify, request, send_from_directory
 import psycopg2
 from psycopg2.extras import RealDictCursor
 from flask_cors import CORS
 from datetime import datetime
 import os
+import base64
+import uuid
+from werkzeug.utils import secure_filename
 
 app = Flask(__name__)
 CORS(app)
+
+# 업로드 설정
+UPLOAD_FOLDER = 'uploads'
+ALLOWED_EXTENSIONS = {'png', 'jpg', 'jpeg', 'gif'}
+MAX_CONTENT_LENGTH = 16 * 1024 * 1024  # 16MB
+
+app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
+app.config['MAX_CONTENT_LENGTH'] = MAX_CONTENT_LENGTH
+
+# 업로드 폴더 생성
+os.makedirs(UPLOAD_FOLDER, exist_ok=True)
+
+def allowed_file(filename):
+    return '.' in filename and \
+           filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
 
 # 데이터베이스 연결 함수
 def get_db_connection():
@@ -41,7 +59,107 @@ def get_menu():
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
-# 게시판 관련 API들 추가
+# 이미지 업로드 API
+@app.route('/api/upload-image', methods=['POST'])
+def upload_image():
+    try:
+        if 'image' not in request.files:
+            return jsonify({"error": "No image file provided"}), 400
+        
+        file = request.files['image']
+        if file.filename == '':
+            return jsonify({"error": "No file selected"}), 400
+        
+        if file and allowed_file(file.filename):
+            filename = secure_filename(file.filename)
+            unique_filename = f"{uuid.uuid4().hex}_{filename}"
+            filepath = os.path.join(app.config['UPLOAD_FOLDER'], unique_filename)
+            
+            file.save(filepath)
+            
+            # 수정: /api 제거 (Flutter에서 ApiConfig.baseUrl과 합쳐질 때 중복 방지)
+            image_url = f"/images/{unique_filename}"
+            
+            return jsonify({"image_url": image_url}), 201
+        else:
+            return jsonify({"error": "Invalid file type. Only PNG, JPG, JPEG, GIF allowed"}), 400
+            
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+# 이미지 서빙 API
+@app.route('/api/images/<filename>')
+def serve_image(filename):
+    try:
+        print(f"이미지 요청: {filename}")
+        print(f"업로드 폴더: {app.config['UPLOAD_FOLDER']}")
+        
+        # 파일 존재 확인
+        filepath = os.path.join(app.config['UPLOAD_FOLDER'], filename)
+        if not os.path.exists(filepath):
+            print(f"파일이 존재하지 않음: {filepath}")
+            return jsonify({"error": "Image not found"}), 404
+            
+        return send_from_directory(app.config['UPLOAD_FOLDER'], filename)
+    except Exception as e:
+        print(f"이미지 서빙 오류: {e}")
+        return jsonify({"error": "Image not found"}), 404
+
+# Base64 이미지 업로드 API
+@app.route('/api/upload-image-base64', methods=['POST'])
+def upload_image_base64():
+    try:
+        data = request.get_json()
+        
+        if 'image_data' not in data or 'filename' not in data:
+            return jsonify({"error": "image_data and filename are required"}), 400
+        
+        image_data = data['image_data']
+        filename = data['filename']
+        
+        print(f"이미지 업로드 요청: {filename}")
+        
+        # Base64 디코딩
+        try:
+            if ',' in image_data:
+                image_data = image_data.split(',')[1]
+            
+            image_bytes = base64.b64decode(image_data)
+            print(f"이미지 크기: {len(image_bytes)} bytes")
+        except Exception as e:
+            return jsonify({"error": "Invalid base64 image data"}), 400
+        
+        # 파일 확장자 검증
+        file_ext = filename.rsplit('.', 1)[1].lower() if '.' in filename else ''
+        if file_ext not in ALLOWED_EXTENSIONS:
+            return jsonify({"error": "Invalid file type"}), 400
+        
+        # 고유한 파일명 생성
+        unique_filename = f"{uuid.uuid4().hex}.{file_ext}"
+        filepath = os.path.join(app.config['UPLOAD_FOLDER'], unique_filename)
+        
+        print(f"저장할 파일 경로: {filepath}")
+        
+        # 파일 저장
+        with open(filepath, 'wb') as f:
+            f.write(image_bytes)
+        
+        # 파일이 실제로 저장되었는지 확인
+        if os.path.exists(filepath):
+            print(f"파일 저장 성공: {filepath}")
+        else:
+            print(f"파일 저장 실패: {filepath}")
+            return jsonify({"error": "Failed to save image"}), 500
+        
+        # 수정: /api 제거 (Flutter에서 ApiConfig.baseUrl과 합쳐질 때 중복 방지)
+        image_url = f"/images/{unique_filename}"
+        print(f"생성된 이미지 URL: {image_url}")
+        
+        return jsonify({"image_url": image_url}), 201
+        
+    except Exception as e:
+        print(f"이미지 업로드 오류: {e}")
+        return jsonify({"error": str(e)}), 500
 
 @app.route('/api/posts', methods=['GET'])
 def get_posts():
@@ -56,7 +174,6 @@ def get_posts():
         conn = get_db_connection()
         cur = conn.cursor(cursor_factory=RealDictCursor)
         
-        # 댓글 수도 함께 조회
         query = """
         SELECT p.*, 
                COALESCE(c.comment_count, 0) as comment_count
@@ -124,18 +241,22 @@ def get_post_detail(post_id):
         conn = get_db_connection()
         cur = conn.cursor(cursor_factory=RealDictCursor)
         
-        # 게시글 조회
         cur.execute('SELECT * FROM posts WHERE id = %s', (post_id,))
         post = cur.fetchone()
         
         if not post:
             return jsonify({"error": "Post not found"}), 404
         
-        # 댓글 조회
         cur.execute("""
-            SELECT * FROM comments 
-            WHERE post_id = %s 
-            ORDER BY created_at ASC
+            SELECT c.*, COALESCE(cl.like_count, 0) as likes
+            FROM comments c
+            LEFT JOIN (
+                SELECT comment_id, COUNT(*) as like_count 
+                FROM comment_likes 
+                GROUP BY comment_id
+            ) cl ON c.id = cl.comment_id
+            WHERE c.post_id = %s 
+            ORDER BY c.created_at ASC
         """, (post_id,))
         comments = cur.fetchall()
         
@@ -159,7 +280,6 @@ def toggle_post_like(post_id):
         conn = get_db_connection()
         cur = conn.cursor(cursor_factory=RealDictCursor)
         
-        # 이미 좋아요를 눌렀는지 확인
         cur.execute("""
             SELECT id FROM post_likes 
             WHERE post_id = %s AND user_identifier = %s
@@ -168,7 +288,6 @@ def toggle_post_like(post_id):
         existing_like = cur.fetchone()
         
         if existing_like:
-            # 좋아요 취소
             cur.execute("""
                 DELETE FROM post_likes 
                 WHERE post_id = %s AND user_identifier = %s
@@ -181,7 +300,6 @@ def toggle_post_like(post_id):
             
             liked = False
         else:
-            # 좋아요 추가
             cur.execute("""
                 INSERT INTO post_likes (post_id, user_identifier)
                 VALUES (%s, %s)
@@ -194,7 +312,6 @@ def toggle_post_like(post_id):
             
             liked = True
         
-        # 업데이트된 좋아요 수 조회
         cur.execute('SELECT likes FROM posts WHERE id = %s', (post_id,))
         result = cur.fetchone()
         
@@ -224,7 +341,7 @@ def create_comment(post_id):
         query = """
         INSERT INTO comments (post_id, content, author)
         VALUES (%s, %s, %s)
-        RETURNING *
+        RETURNING *, 0 as likes
         """
         
         cur.execute(query, (post_id, data['content'], data['author']))
@@ -238,5 +355,53 @@ def create_comment(post_id):
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
+@app.route('/api/comments/<int:comment_id>/like', methods=['POST'])
+def toggle_comment_like(comment_id):
+    """댓글 좋아요 토글"""
+    try:
+        data = request.get_json()
+        user_identifier = data.get('user_identifier', request.remote_addr)
+        
+        conn = get_db_connection()
+        cur = conn.cursor(cursor_factory=RealDictCursor)
+        
+        cur.execute("""
+            SELECT id FROM comment_likes 
+            WHERE comment_id = %s AND user_identifier = %s
+        """, (comment_id, user_identifier))
+        
+        existing_like = cur.fetchone()
+        
+        if existing_like:
+            cur.execute("""
+                DELETE FROM comment_likes 
+                WHERE comment_id = %s AND user_identifier = %s
+            """, (comment_id, user_identifier))
+            liked = False
+        else:
+            cur.execute("""
+                INSERT INTO comment_likes (comment_id, user_identifier)
+                VALUES (%s, %s)
+            """, (comment_id, user_identifier))
+            liked = True
+        
+        cur.execute("""
+            SELECT COUNT(*) as like_count 
+            FROM comment_likes 
+            WHERE comment_id = %s
+        """, (comment_id,))
+        result = cur.fetchone()
+        
+        conn.commit()
+        cur.close()
+        conn.close()
+        
+        return jsonify({
+            "liked": liked,
+            "likes": result['like_count']
+        })
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
 if __name__ == '__main__':
-    app.run(host='0.0.0.0', port=5000)
+    app.run(host='0.0.0.0', port=5000, debug=True)

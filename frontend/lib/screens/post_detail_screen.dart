@@ -4,6 +4,7 @@ import 'package:provider/provider.dart';
 import '../models/post_model.dart';
 import '../models/comment_model.dart';
 import '../services/api_service.dart';
+import '../config/api_config.dart';
 import 'package:intl/intl.dart';
 
 class PostDetailScreen extends StatefulWidget {
@@ -21,6 +22,7 @@ class _PostDetailScreenState extends State<PostDetailScreen> {
   TextEditingController _authorController = TextEditingController();
   bool isLiked = false;
   int likeCount = 0;
+  Map<int, bool> commentLikedStatus = {}; // 댓글별 좋아요 상태
 
   @override
   void initState() {
@@ -62,6 +64,26 @@ class _PostDetailScreenState extends State<PostDetailScreen> {
       print('좋아요 처리 오류: $e');
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('좋아요 처리 중 오류가 발생했습니다')),
+      );
+    }
+  }
+
+  Future<void> _toggleCommentLike(int commentId, int currentLikes) async {
+    try {
+      final apiService = Provider.of<ApiService>(context, listen: false);
+      final result = await apiService.toggleCommentLike(commentId);
+      
+      setState(() {
+        commentLikedStatus[commentId] = result['liked'];
+      });
+      
+      // 댓글 목록 새로고침
+      _loadPostDetail();
+      
+    } catch (e) {
+      print('댓글 좋아요 처리 오류: $e');
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('댓글 좋아요 처리 중 오류가 발생했습니다')),
       );
     }
   }
@@ -201,15 +223,44 @@ class _PostDetailScreenState extends State<PostDetailScreen> {
                             if (post.imageUrl != null) ...[
                               Container(
                                 width: double.infinity,
-                                height: 200,
+                                constraints: BoxConstraints(maxHeight: 300),
                                 decoration: BoxDecoration(
-                                  color: Colors.grey[200],
                                   borderRadius: BorderRadius.circular(8),
+                                  border: Border.all(color: Colors.grey.shade200),
                                 ),
-                                child: Icon(
-                                  Icons.image,
-                                  size: 50,
-                                  color: Colors.grey[400],
+                                child: ClipRRect(
+                                  borderRadius: BorderRadius.circular(8),
+                                  child: Image.network(
+                                    '${ApiConfig.baseUrl}${post.imageUrl}',
+                                    fit: BoxFit.cover,
+                                    errorBuilder: (context, error, stackTrace) {
+                                      return Container(
+                                        height: 200,
+                                        color: Colors.grey[200],
+                                        child: Column(
+                                          mainAxisAlignment: MainAxisAlignment.center,
+                                          children: [
+                                            Icon(Icons.broken_image, size: 50, color: Colors.grey[400]),
+                                            SizedBox(height: 8),
+                                            Text('이미지를 불러올 수 없습니다', style: TextStyle(color: Colors.grey[600])),
+                                          ],
+                                        ),
+                                      );
+                                    },
+                                    loadingBuilder: (context, child, loadingProgress) {
+                                      if (loadingProgress == null) return child;
+                                      return Container(
+                                        height: 200,
+                                        child: Center(
+                                          child: CircularProgressIndicator(
+                                            value: loadingProgress.expectedTotalBytes != null
+                                                ? loadingProgress.cumulativeBytesLoaded / loadingProgress.expectedTotalBytes!
+                                                : null,
+                                          ),
+                                        ),
+                                      );
+                                    },
+                                  ),
                                 ),
                               ),
                               SizedBox(height: 16),
@@ -229,22 +280,29 @@ class _PostDetailScreenState extends State<PostDetailScreen> {
                               children: [
                                 InkWell(
                                   onTap: _toggleLike,
-                                  child: Row(
-                                    children: [
-                                      Icon(
-                                        isLiked ? Icons.thumb_up : Icons.thumb_up_outlined,
-                                        color: isLiked ? Colors.blue : Colors.grey[600],
-                                        size: 20,
-                                      ),
-                                      SizedBox(width: 4),
-                                      Text(
-                                        '$likeCount',
-                                        style: TextStyle(
+                                  child: Container(
+                                    padding: EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                                    decoration: BoxDecoration(
+                                      color: isLiked ? Colors.blue.withOpacity(0.1) : Colors.transparent,
+                                      borderRadius: BorderRadius.circular(20),
+                                    ),
+                                    child: Row(
+                                      children: [
+                                        Icon(
+                                          isLiked ? Icons.thumb_up : Icons.thumb_up_outlined,
                                           color: isLiked ? Colors.blue : Colors.grey[600],
-                                          fontWeight: FontWeight.bold,
+                                          size: 20,
                                         ),
-                                      ),
-                                    ],
+                                        SizedBox(width: 4),
+                                        Text(
+                                          '$likeCount',
+                                          style: TextStyle(
+                                            color: isLiked ? Colors.blue : Colors.grey[600],
+                                            fontWeight: FontWeight.bold,
+                                          ),
+                                        ),
+                                      ],
+                                    ),
                                   ),
                                 ),
                                 SizedBox(width: 20),
@@ -323,6 +381,14 @@ class _PostDetailScreenState extends State<PostDetailScreen> {
                 decoration: BoxDecoration(
                   color: Colors.white,
                   border: Border(top: BorderSide(color: Colors.grey.shade200)),
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.grey.withOpacity(0.1),
+                      spreadRadius: 1,
+                      blurRadius: 3,
+                      offset: Offset(0, -1),
+                    ),
+                  ],
                 ),
                 child: SafeArea(
                   child: Column(
@@ -380,6 +446,8 @@ class _PostDetailScreenState extends State<PostDetailScreen> {
   }
 
   Widget _buildCommentItem(Comment comment) {
+    final isLiked = commentLikedStatus[comment.id] ?? false;
+    
     return Container(
       padding: EdgeInsets.symmetric(horizontal: 20, vertical: 12),
       child: Row(
@@ -420,21 +488,39 @@ class _PostDetailScreenState extends State<PostDetailScreen> {
                 SizedBox(height: 4),
                 Text(
                   comment.content,
-                  style: TextStyle(fontSize: 14),
+                  style: TextStyle(fontSize: 14, height: 1.4),
                 ),
                 SizedBox(height: 8),
                 Row(
                   children: [
                     InkWell(
-                      onTap: () {
-                        // 댓글 좋아요 기능 (향후 구현)
-                      },
-                      child: Row(
-                        children: [
-                          Icon(Icons.thumb_up_outlined, size: 14, color: Colors.grey[500]),
-                          SizedBox(width: 4),
-                          Text('${comment.likes}', style: TextStyle(fontSize: 12, color: Colors.grey[500])),
-                        ],
+                      onTap: () => _toggleCommentLike(comment.id, comment.likes),
+                      borderRadius: BorderRadius.circular(16),
+                      child: Container(
+                        padding: EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                        decoration: BoxDecoration(
+                          color: isLiked ? Colors.blue.withOpacity(0.1) : Colors.transparent,
+                          borderRadius: BorderRadius.circular(16),
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(
+                              isLiked ? Icons.thumb_up : Icons.thumb_up_outlined, 
+                              size: 14, 
+                              color: isLiked ? Colors.blue : Colors.grey[500]
+                            ),
+                            SizedBox(width: 4),
+                            Text(
+                              '${comment.likes}', 
+                              style: TextStyle(
+                                fontSize: 12, 
+                                color: isLiked ? Colors.blue : Colors.grey[500],
+                                fontWeight: isLiked ? FontWeight.bold : FontWeight.normal,
+                              )
+                            ),
+                          ],
+                        ),
                       ),
                     ),
                   ],
