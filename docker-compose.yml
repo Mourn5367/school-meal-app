@@ -1,4 +1,4 @@
-services:  # 이 라인을 추가해야 합니다!
+services:
   db:
     image: postgres:13
     volumes:
@@ -24,9 +24,6 @@ services:  # 이 라인을 추가해야 합니다!
     build: ./frontend
     ports:
       - "80:80"
-    volumes:
-      - ./frontend:/app
-    command: flutter run -d web-server --web-port=80 --web-hostname=0.0.0.0
     depends_on:
       - backend
       

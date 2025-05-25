@@ -59,6 +59,16 @@ def get_holiday(*menus):
     else:
         return False
 
+# 날짜가 주말인지 확인하는 함수
+def is_weekend(date_str):
+    try:
+        date = datetime.strptime(date_str, '%Y-%m-%d')
+        # 5: 토요일, 6: 일요일 (파이썬의 weekday()는 0:월요일, 6:일요일)
+        return date.weekday() >= 5
+    except Exception as e:
+        logger.warning(f"날짜 형식 변환 오류: {e}, 주말이 아닌 것으로 처리")
+        return False
+
 # 날짜 문자열 파싱 함수
 def parse_date(date_str, index=0):
     """날짜 문자열을 파싱하여 YYYY-MM-DD 형식으로 반환합니다."""
@@ -145,6 +155,11 @@ def crawl_menu():
             # 날짜 형식 확인 및 변환
             date_only = parse_date(date_cell, i)
             
+            # 주말인 경우 건너뛰기
+            if is_weekend(date_only):
+                logger.info(f"주말 데이터 {date_only} 제외")
+                continue
+            
             # 요일 정보
             weekday = ""
             weekday_match = re.search(r'[월화수목금토일]요일', date_cell)
@@ -220,6 +235,11 @@ def save_to_database(meal_list):
                 date_str = datetime.now().strftime('%Y-%m-%d')
                 logger.warning(f"유효하지 않은 날짜 형식: {meal['date']}, 현재 날짜로 대체: {date_str}")
             
+            # 주말인 경우 저장하지 않음
+            if is_weekend(date_str):
+                logger.info(f"주말 데이터 {date_str} 저장 제외")
+                continue
+            
             # 아침, 점심, 저녁 메뉴 삽입
             for meal_type, db_meal_type in [('breakfast', '아침'), ('lunch', '점심'), ('dinner', '저녁')]:
                 menu = meal[meal_type]
@@ -257,10 +277,16 @@ def generate_dummy_data():
     
     meal_list = []
     
-    # 오늘부터 5일간의 메뉴 생성
-    for i in range(5):
-        menu_date = datetime.now() + timedelta(days=i)
-        weekday = weekdays[i % 5]
+    # 오늘부터 5일간의 메뉴 생성 (주말 제외)
+    current_date = datetime.now()
+    for i in range(10):  # 최대 10일까지 시도 (주말 건너뛰기 위해)
+        menu_date = current_date + timedelta(days=i)
+        
+        # 주말인 경우 건너뛰기
+        if menu_date.weekday() >= 5:  # 5: 토요일, 6: 일요일
+            continue
+            
+        weekday = weekdays[menu_date.weekday()]
         
         # 아침 메뉴
         breakfast = ", ".join(random.sample(breakfast_items, 3))
@@ -277,6 +303,10 @@ def generate_dummy_data():
             'dinner': dinner,   
             'is_holiday': False
         })
+        
+        # 평일 5일이 모이면 종료
+        if len(meal_list) >= 5:
+            break
     
     return meal_list
 

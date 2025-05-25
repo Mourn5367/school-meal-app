@@ -3,7 +3,6 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../services/api_service.dart';
 import '../models/meal_model.dart';
-import '../widgets/meal_card.dart';
 import 'package:intl/intl.dart';
 
 class MenuScreen extends StatefulWidget {
@@ -12,126 +11,311 @@ class MenuScreen extends StatefulWidget {
 }
 
 class _MenuScreenState extends State<MenuScreen> {
-  late Future<List<Meal>> _mealsFuture;
-  String _selectedMealType = '전체';
+  late Future<Map<String, List<Meal>>> _weeklyMealsFuture;
   
   @override
   void initState() {
     super.initState();
-    _mealsFuture = _loadMeals();
+    _weeklyMealsFuture = _loadWeeklyMeals();
   }
   
- Future<List<Meal>> _loadMeals() async {
-  final apiService = Provider.of<ApiService>(context, listen: false);
-  final meals = await apiService.getMeals();
+  // RFC 2822 형식 날짜를 파싱하는 함수
+  DateTime? _parseDate(String dateStr) {
+    try {
+      // 기본 ISO 형식 시도 (yyyy-MM-dd)
+      if (dateStr.contains('-') && !dateStr.contains(',')) {
+        return DateTime.parse(dateStr);
+      }
+      
+      // RFC 2822 형식 파싱 (예: "Sat, 31 May 2025 00:00:00 GMT")
+      if (dateStr.contains(',')) {
+        // RFC 2822 형식을 직접 파싱
+        final parts = dateStr.split(' ');
+        if (parts.length >= 4) {
+          final day = int.tryParse(parts[1]);
+          final monthStr = parts[2];
+          final year = int.tryParse(parts[3]);
+          
+          final monthMap = {
+            'Jan': 1, 'Feb': 2, 'Mar': 3, 'Apr': 4, 'May': 5, 'Jun': 6,
+            'Jul': 7, 'Aug': 8, 'Sep': 9, 'Oct': 10, 'Nov': 11, 'Dec': 12
+          };
+          
+          final month = monthMap[monthStr];
+          
+          if (day != null && month != null && year != null) {
+            return DateTime(year, month, day);
+          }
+        }
+      }
+      
+      return null;
+    } catch (e) {
+      print('날짜 파싱 실패: $dateStr - $e');
+      return null;
+    }
+  }
   
-  // 현재 날짜 구하기
-  final today = DateTime.now();
-  final todayStr = DateFormat('yyyy-MM-dd').format(today);
-  
-  // 현재 날짜 이후의 메뉴만 필터링하고, 주말(토, 일) 제외
-  final filteredMeals = meals.where((meal) {
-    // 날짜 형식 변환
-    final mealDate = DateTime.parse(meal.date);
+  Future<Map<String, List<Meal>>> _loadWeeklyMeals() async {
+    final apiService = Provider.of<ApiService>(context, listen: false);
+    final meals = await apiService.getMeals();
     
-    // 주말 체크 (6: 토요일, 7: 일요일)
-    final isWeekend = mealDate.weekday == 6 || mealDate.weekday == 7;
+    // 현재 날짜 구하기
+    final today = DateTime.now();
     
-    // 오늘 이후의 날짜이며 주말이 아닌 경우만 포함
-    return meal.date.compareTo(todayStr) >= 0 && !isWeekend;
-  }).toList();
+    // 현재 날짜 이후의 메뉴만 필터링하고, 주말(토, 일) 제외
+    final filteredMeals = meals.where((meal) {
+      final mealDate = _parseDate(meal.date);
+      if (mealDate == null) return false;
+      
+      final isWeekend = mealDate.weekday == 6 || mealDate.weekday == 7;
+      final isToday = mealDate.isAfter(today.subtract(Duration(days: 1)));
+      
+      return isToday && !isWeekend;
+    }).toList();
+    
+    // 날짜별로 그룹화 (날짜를 키로 사용하기 위해 YYYY-MM-DD 형식으로 변환)
+    Map<String, List<Meal>> groupedMeals = {};
+    for (var meal in filteredMeals) {
+      final mealDate = _parseDate(meal.date);
+      if (mealDate != null) {
+        final dateKey = DateFormat('yyyy-MM-dd').format(mealDate);
+        if (!groupedMeals.containsKey(dateKey)) {
+          groupedMeals[dateKey] = [];
+        }
+        groupedMeals[dateKey]!.add(meal);
+      }
+    }
+    
+    // 날짜순으로 정렬
+    var sortedKeys = groupedMeals.keys.toList()..sort();
+    Map<String, List<Meal>> sortedGroupedMeals = {};
+    for (var key in sortedKeys) {
+      sortedGroupedMeals[key] = groupedMeals[key]!;
+      // 각 날짜 내에서 식사 순서대로 정렬 (아침, 점심, 저녁)
+      sortedGroupedMeals[key]!.sort((a, b) {
+        const mealOrder = {'아침': 1, '점심': 2, '저녁': 3};
+        return (mealOrder[a.mealType] ?? 4).compareTo(mealOrder[b.mealType] ?? 4);
+      });
+    }
+    
+    return sortedGroupedMeals;
+  }
   
-  return filteredMeals;
-}
+  String _formatDateHeader(String dateStr) {
+    try {
+      // YYYY-MM-DD 형식의 dateStr을 받아서 포맷팅
+      final date = DateTime.parse(dateStr);
+      final weekdays = ['월', '화', '수', '목', '금', '토', '일'];
+      final weekday = weekdays[date.weekday - 1];
+      return '${date.month}월 ${date.day}일 ($weekday)';
+    } catch (e) {
+      print('날짜 포맷 오류: $dateStr - $e');
+      return dateStr; // 오류 발생시 원본 날짜 반환
+    }
+  }
+  
+  Color _getWeekdayColor(String dateStr) {
+    try {
+      // YYYY-MM-DD 형식의 dateStr을 받아서 색상 결정
+      final date = DateTime.parse(dateStr);
+      final colors = [
+        Colors.red.shade300,    // 월
+        Colors.orange.shade300, // 화
+        Colors.green.shade300,  // 수
+        Colors.blue.shade300,   // 목
+        Colors.purple.shade300, // 금
+        Colors.grey.shade300,   // 토
+        Colors.grey.shade300,   // 일
+      ];
+      return colors[date.weekday - 1];
+    } catch (e) {
+      print('날짜 색상 처리 오류: $dateStr - $e');
+      return Colors.grey.shade300; // 오류 발생시 기본 색상
+    }
+  }
   
   @override
   Widget build(BuildContext context) {
-    return Column(
-      children: [
-        _buildFilterBar(),
-        Expanded(
-          child: RefreshIndicator(
-            onRefresh: () async {
-              setState(() {
-                _mealsFuture = _loadMeals();
-              });
-            },
-            child: FutureBuilder<List<Meal>>(
-              future: _mealsFuture,
-              builder: (context, snapshot) {
-                if (snapshot.connectionState == ConnectionState.waiting) {
-                  return Center(child: CircularProgressIndicator());
-                } else if (snapshot.hasError) {
-                  return Center(
-                    child: Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        Icon(Icons.error_outline, size: 48, color: Colors.red),
-                        SizedBox(height: 16),
-                        Text('데이터를 불러올 수 없습니다.\n${snapshot.error}'),
-                        SizedBox(height: 16),
-                        ElevatedButton(
-                          onPressed: () {
-                            setState(() {
-                              _mealsFuture = _loadMeals();
-                            });
-                          },
-                          child: Text('다시 시도'),
-                        ),
-                      ],
+    return RefreshIndicator(
+      onRefresh: () async {
+        setState(() {
+          _weeklyMealsFuture = _loadWeeklyMeals();
+        });
+      },
+      child: FutureBuilder<Map<String, List<Meal>>>(
+        future: _weeklyMealsFuture,
+        builder: (context, snapshot) {
+          if (snapshot.connectionState == ConnectionState.waiting) {
+            return Center(child: CircularProgressIndicator());
+          } else if (snapshot.hasError) {
+            return Center(
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Icon(Icons.error_outline, size: 48, color: Colors.red),
+                  SizedBox(height: 16),
+                  Padding(
+                    padding: EdgeInsets.symmetric(horizontal: 32),
+                    child: Text(
+                      '데이터를 불러올 수 없습니다.\n${snapshot.error}',
+                      textAlign: TextAlign.center,
+                      style: TextStyle(fontSize: 16),
                     ),
-                  );
-                } else if (!snapshot.hasData || snapshot.data!.isEmpty) {
-                  return Center(child: Text('현재 및 향후 메뉴 정보가 없습니다.'));
-                } else {
-                  final meals = snapshot.data!;
-                  final filteredMeals = _selectedMealType == '전체'
-                      ? meals
-                      : meals.where((meal) => meal.mealType == _selectedMealType).toList();
-                  
-                  if (filteredMeals.isEmpty) {
-                    return Center(child: Text('선택한 조건에 맞는 메뉴가 없습니다.'));
-                  }
-                  
-                  return ListView.builder(
-                    itemCount: filteredMeals.length,
-                    itemBuilder: (context, index) {
-                      return MealCard(meal: filteredMeals[index]);
+                  ),
+                  SizedBox(height: 16),
+                  ElevatedButton(
+                    onPressed: () {
+                      setState(() {
+                        _weeklyMealsFuture = _loadWeeklyMeals();
+                      });
                     },
-                  );
-                }
+                    child: Text('다시 시도'),
+                  ),
+                ],
+              ),
+            );
+          } else if (!snapshot.hasData || snapshot.data!.isEmpty) {
+            return Center(child: Text('현재 및 향후 메뉴 정보가 없습니다.'));
+          } else {
+            final weeklyMeals = snapshot.data!;
+            
+            return ListView.builder(
+              padding: EdgeInsets.all(16),
+              itemCount: weeklyMeals.length,
+              itemBuilder: (context, index) {
+                final date = weeklyMeals.keys.elementAt(index);
+                final mealsForDay = weeklyMeals[date]!;
+                
+                return Card(
+                  margin: EdgeInsets.only(bottom: 12),
+                  elevation: 4,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: Theme(
+                    data: Theme.of(context).copyWith(
+                      dividerColor: Colors.transparent,
+                    ),
+                    child: ExpansionTile(
+                      backgroundColor: _getWeekdayColor(date).withOpacity(0.1),
+                      collapsedBackgroundColor: _getWeekdayColor(date).withOpacity(0.05),
+                      iconColor: _getWeekdayColor(date),
+                      collapsedIconColor: _getWeekdayColor(date),
+                      title: Container(
+                        padding: EdgeInsets.symmetric(vertical: 8),
+                        child: Row(
+                          children: [
+                            Container(
+                              width: 4,
+                              height: 40,
+                              decoration: BoxDecoration(
+                                color: _getWeekdayColor(date),
+                                borderRadius: BorderRadius.circular(2),
+                              ),
+                            ),
+                            SizedBox(width: 16),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    _formatDateHeader(date),
+                                    style: TextStyle(
+                                      fontSize: 18,
+                                      fontWeight: FontWeight.bold,
+                                      color: Colors.black87,
+                                    ),
+                                  ),
+                                  SizedBox(height: 4),
+                                  Text(
+                                    '${mealsForDay.length}개 식사',
+                                    style: TextStyle(
+                                      fontSize: 14,
+                                      color: Colors.grey[600],
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      children: mealsForDay.map((meal) => _buildMealItem(meal)).toList(),
+                    ),
+                  ),
+                );
               },
-            ),
-          ),
-        ),
-      ],
+            );
+          }
+        },
+      ),
     );
   }
   
-  Widget _buildFilterBar() {
+  Widget _buildMealItem(Meal meal) {
     return Container(
-      padding: EdgeInsets.symmetric(vertical: 8, horizontal: 16),
-      color: Colors.grey[200],
-      child: Row(
+      margin: EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      padding: EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: Colors.grey.shade200),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.grey.withOpacity(0.1),
+            spreadRadius: 1,
+            blurRadius: 3,
+            offset: Offset(0, 1),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text('식사 유형: '),
-          SizedBox(width: 8),
-          DropdownButton<String>(
-            value: _selectedMealType,
-            items: ['전체', '아침', '점심', '저녁'].map((String value) {
-              return DropdownMenuItem<String>(
-                value: value,
-                child: Text(value),
-              );
-            }).toList(),
-            onChanged: (newValue) {
-              setState(() {
-                _selectedMealType = newValue!;
-              });
-            },
+          Row(
+            children: [
+              Container(
+                padding: EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                decoration: BoxDecoration(
+                  color: _getMealTypeColor(meal.mealType),
+                  borderRadius: BorderRadius.circular(16),
+                ),
+                child: Text(
+                  meal.mealType,
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontWeight: FontWeight.bold,
+                    fontSize: 12,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          SizedBox(height: 12),
+          Text(
+            meal.content,
+            style: TextStyle(
+              fontSize: 15,
+              height: 1.4,
+              color: Colors.black87,
+            ),
           ),
         ],
       ),
     );
+  }
+
+  Color _getMealTypeColor(String mealType) {
+    switch (mealType) {
+      case '아침':
+        return Colors.orange;
+      case '점심':
+        return Colors.green;
+      case '저녁':
+        return Colors.blue;
+      default:
+        return Colors.grey;
+    }
   }
 }
