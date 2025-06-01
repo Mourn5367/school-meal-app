@@ -4,7 +4,7 @@ class ApiConfig {
   static String get baseUrl {
     // 웹 브라우저에서 직접 접근하는 경우 window.location.hostname 사용
     //return 'http://localhost:5000/api';
-     return 'http://192.168.137.1:5000/api';
+     return 'http://192.168.0.2:5000/api';
   }
   
   static const String menuEndpoint = '/menu';
