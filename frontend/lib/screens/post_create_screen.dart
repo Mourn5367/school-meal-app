@@ -1,4 +1,4 @@
-// frontend/lib/screens/post_create_screen.dart
+// frontend/lib/screens/post_create_screen.dart - 스크롤 개선 버전
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
@@ -377,9 +377,10 @@ class _PostCreateScreenState extends State<PostCreateScreen> {
             )
           : Form(
               key: _formKey,
-              child: Padding(
-                padding: const EdgeInsets.all(16.0),
+              child: SingleChildScrollView( // 스크롤 가능하도록 추가
+                padding: EdgeInsets.all(16.0),
                 child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     // 메뉴 정보 표시
                     Container(
@@ -506,8 +507,9 @@ class _PostCreateScreenState extends State<PostCreateScreen> {
                     ),
                     SizedBox(height: 20),
                     
-                    // 내용 입력
-                    Expanded(
+                    // 내용 입력 - 고정 높이로 변경하여 스크롤 가능하게 함
+                    Container(
+                      height: 300, // 고정 높이 설정
                       child: TextFormField(
                         controller: _contentController,
                         decoration: InputDecoration(
@@ -531,6 +533,9 @@ class _PostCreateScreenState extends State<PostCreateScreen> {
                         },
                       ),
                     ),
+                    
+                    // 하단 여백 추가 (키보드가 올라올 때를 위해)
+                    SizedBox(height: 100),
                   ],
                 ),
               ),
