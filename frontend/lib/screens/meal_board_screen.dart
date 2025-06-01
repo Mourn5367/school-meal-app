@@ -1,14 +1,13 @@
-// frontend/lib/screens/meal_board_screen.dart
+// frontend/lib/screens/meal_board_screen.dart - 시간 표시 개선
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../models/meal_model.dart';
 import '../models/post_model.dart';
 import '../services/api_service.dart';
 import 'post_detail_screen.dart';
-import 'package:intl/intl.dart';
 import 'post_create_screen.dart';
 import '../utils/date_utils.dart' as DateUtilsCustom;
-import 'dart:io';
+
 class MealBoardScreen extends StatefulWidget {
   final Meal meal;
   final String date;
@@ -41,12 +40,12 @@ class _MealBoardScreenState extends State<MealBoardScreen> {
   Future<List<Post>> _fetchPosts() async {
     try {
       final apiService = Provider.of<ApiService>(context, listen: false);
-      
+
       // 날짜를 API 형식으로 변환
       final formattedDate = DateUtilsCustom.DateUtils.formatToApiDate(widget.date);
-      
+
       print('게시글 조회 - 날짜: $formattedDate, 식사: ${widget.meal.mealType}');
-      
+
       final posts = await apiService.getPosts(formattedDate, widget.meal.mealType);
       return posts;
     } catch (e) {
@@ -142,16 +141,16 @@ class _MealBoardScreenState extends State<MealBoardScreen> {
                       ),
                       SizedBox(height: 8),
                       // 메뉴를 리스트 형태로 표시
-                      ...widget.meal.content.split(',').map((item) => 
-                        Padding(
-                          padding: EdgeInsets.symmetric(vertical: 2),
-                          child: Row(
-                            children: [
-                              Text('• ', style: TextStyle(color: _getMealTypeColor(widget.meal.mealType))),
-                              Expanded(child: Text(item.trim(), style: TextStyle(fontSize: 15))),
-                            ],
+                      ...widget.meal.content.split(',').map((item) =>
+                          Padding(
+                            padding: EdgeInsets.symmetric(vertical: 2),
+                            child: Row(
+                              children: [
+                                Text('• ', style: TextStyle(color: _getMealTypeColor(widget.meal.mealType))),
+                                Expanded(child: Text(item.trim(), style: TextStyle(fontSize: 15))),
+                              ],
+                            ),
                           ),
-                        ),
                       ),
                     ],
                   ),
@@ -159,7 +158,7 @@ class _MealBoardScreenState extends State<MealBoardScreen> {
               ],
             ),
           ),
-          
+
           // 게시글 섹션
           Expanded(
             child: Column(
@@ -344,7 +343,8 @@ class _MealBoardScreenState extends State<MealBoardScreen> {
                   ),
                   SizedBox(width: 8),
                   Text(
-                    _formatDateTime(post.createdAt),
+                    // 수정된 부분: DateUtils의 상대 시간 함수 사용
+                    DateUtilsCustom.DateUtils.formatRelativeTime(post.createdAt),
                     style: TextStyle(
                       fontSize: 12,
                       color: Colors.grey[500],
@@ -369,68 +369,5 @@ class _MealBoardScreenState extends State<MealBoardScreen> {
         ),
       ),
     );
-  }
-
-  String _formatDateTime(DateTime dateTime) {
-    final now = DateTime.now();
-
-    print('=== 안드로이드 시간 계산 디버그 ===');
-    print('플랫폼: ${Platform.isAndroid ? "Android" : "기타"}');
-    print('원본 게시글 시간: $dateTime (UTC: ${dateTime.isUtc})');
-    print('현재 시간: $now (UTC: ${now.isUtc})');
-
-    // 안드로이드에서는 더 엄격한 시간 처리
-    DateTime finalPostTime;
-    DateTime finalNowTime;
-
-    if (Platform.isAndroid) {
-      // 안드로이드: 무조건 로컬 시간으로 통일
-      finalPostTime = dateTime.isUtc ? dateTime.toLocal() : dateTime;
-      finalNowTime = now.isUtc ? now.toLocal() : now;
-
-      print('안드로이드 로컬 변환:');
-      print('  게시글: $finalPostTime');
-      print('  현재: $finalNowTime');
-    } else {
-      // 다른 플랫폼: 기존 방식
-      finalPostTime = dateTime;
-      finalNowTime = now;
-    }
-
-    final difference = finalNowTime.difference(finalPostTime);
-
-    print('최종 시간 차이: ${difference.inMinutes}분 (${difference.inHours}시간, ${difference.inDays}일)');
-    print('차이가 음수인가? ${difference.isNegative}');
-    print('================================');
-
-    // 미래 시간인 경우 (시간대 오류 대응)
-    if (difference.isNegative) {
-      print('⚠️ 미래 시간 감지 - 절댓값으로 계산');
-      final absoluteDifference = difference.abs();
-
-      if (absoluteDifference.inMinutes < 60) {
-        return '${absoluteDifference.inMinutes}분 전';
-      } else if (absoluteDifference.inHours < 24) {
-        return '${absoluteDifference.inHours}시간 전';
-      } else {
-        return '${absoluteDifference.inDays}일 전';
-      }
-    }
-
-    // 정상적인 과거 시간 계산
-    if (difference.inSeconds < 30) {
-      return '방금 전';
-    } else if (difference.inMinutes < 1) {
-      return '1분 미만';
-    } else if (difference.inMinutes < 60) {
-      return '${difference.inMinutes}분 전';
-    } else if (difference.inHours < 24) {
-      return '${difference.inHours}시간 전';
-    } else if (difference.inDays < 7) {
-      return '${difference.inDays}일 전';
-    } else {
-      // 일주일 이상은 구체적인 날짜 표시
-      return DateFormat('MM-dd HH:mm').format(finalPostTime);
-    }
   }
 }

@@ -1,12 +1,12 @@
-// frontend/lib/screens/post_create_screen.dart - 이미지 미리보기 개선
+// frontend/lib/screens/post_detail_screen.dart - 시간 표시 개선
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../models/post_model.dart';
 import '../models/comment_model.dart';
 import '../services/api_service.dart';
 import '../config/api_config.dart';
-import 'package:intl/intl.dart';
-import 'dart:io';
+import '../utils/date_utils.dart' as DateUtilsCustom;
+
 class PostDetailScreen extends StatefulWidget {
   final Post post;
 
@@ -55,7 +55,7 @@ class _PostDetailScreenState extends State<PostDetailScreen> {
     try {
       final apiService = Provider.of<ApiService>(context, listen: false);
       final result = await apiService.togglePostLike(widget.post.id);
-      
+
       setState(() {
         isLiked = result['liked'];
         likeCount = result['likes'];
@@ -72,14 +72,14 @@ class _PostDetailScreenState extends State<PostDetailScreen> {
     try {
       final apiService = Provider.of<ApiService>(context, listen: false);
       final result = await apiService.toggleCommentLike(commentId);
-      
+
       setState(() {
         commentLikedStatus[commentId] = result['liked'];
       });
-      
+
       // 댓글 목록 새로고침
       _loadPostDetail();
-      
+
     } catch (e) {
       print('댓글 좋아요 처리 오류: $e');
       ScaffoldMessenger.of(context).showSnackBar(
@@ -106,13 +106,13 @@ class _PostDetailScreenState extends State<PostDetailScreen> {
 
       _commentController.clear();
       _authorController.clear();
-      
+
       // 키보드 숨기기
       FocusScope.of(context).unfocus();
-      
+
       // 댓글 목록 새로고침
       _loadPostDetail();
-      
+
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('댓글이 작성되었습니다')),
       );
@@ -124,131 +124,38 @@ class _PostDetailScreenState extends State<PostDetailScreen> {
     }
   }
 
-  String _formatDateTime(DateTime dateTime) {
-    final now = DateTime.now();
-
-    print('=== 안드로이드 시간 계산 디버그 ===');
-    print('플랫폼: ${Platform.isAndroid ? "Android" : "기타"}');
-    print('원본 게시글 시간: $dateTime (UTC: ${dateTime.isUtc})');
-    print('현재 시간: $now (UTC: ${now.isUtc})');
-
-    // 안드로이드에서는 더 엄격한 시간 처리
-    DateTime finalPostTime;
-    DateTime finalNowTime;
-
-    if (Platform.isAndroid) {
-      // 안드로이드: 무조건 로컬 시간으로 통일
-      finalPostTime = dateTime.isUtc ? dateTime.toLocal() : dateTime;
-      finalNowTime = now.isUtc ? now.toLocal() : now;
-
-      print('안드로이드 로컬 변환:');
-      print('  게시글: $finalPostTime');
-      print('  현재: $finalNowTime');
-    } else {
-      // 다른 플랫폼: 기존 방식
-      finalPostTime = dateTime;
-      finalNowTime = now;
-    }
-
-    final difference = finalNowTime.difference(finalPostTime);
-
-    print('최종 시간 차이: ${difference.inMinutes}분 (${difference.inHours}시간, ${difference.inDays}일)');
-    print('차이가 음수인가? ${difference.isNegative}');
-    print('================================');
-
-    // 미래 시간인 경우 (시간대 오류 대응)
-    if (difference.isNegative) {
-      print('⚠️ 미래 시간 감지 - 절댓값으로 계산');
-      final absoluteDifference = difference.abs();
-
-      if (absoluteDifference.inMinutes < 60) {
-        return '${absoluteDifference.inMinutes}분 전';
-      } else if (absoluteDifference.inHours < 24) {
-        return '${absoluteDifference.inHours}시간 전';
-      } else {
-        return '${absoluteDifference.inDays}일 전';
-      }
-    }
-
-    // 정상적인 과거 시간 계산
-    if (difference.inSeconds < 30) {
-      return '방금 전';
-    } else if (difference.inMinutes < 1) {
-      return '1분 미만';
-    } else if (difference.inMinutes < 60) {
-      return '${difference.inMinutes}분 전';
-    } else if (difference.inHours < 24) {
-      return '${difference.inHours}시간 전';
-    } else if (difference.inDays < 7) {
-      return '${difference.inDays}일 전';
-    } else {
-      // 일주일 이상은 구체적인 날짜 표시
-      return DateFormat('MM-dd HH:mm').format(finalPostTime);
-    }
-  }
-
   // 이미지 표시를 위한 개선된 위젯
   Widget _buildImageWidget(String? imageUrl) {
-  if (imageUrl == null) return SizedBox.shrink();
+    if (imageUrl == null) return SizedBox.shrink();
 
-  return Container(
-    width: double.infinity,
-    margin: EdgeInsets.symmetric(vertical: 12),
-    child: ClipRRect(
-      borderRadius: BorderRadius.circular(12),
-      child: Image.network(
-        '${ApiConfig.baseUrl}$imageUrl',
-        fit: BoxFit.scaleDown, // 너비에 맞추고 높이는 자동 조절
-        alignment: Alignment.center,
-        errorBuilder: (context, error, stackTrace) {
-          return Container(
-            height: 200,
-            decoration: BoxDecoration(
-              color: Colors.grey[100],
-              borderRadius: BorderRadius.circular(12),
-              border: Border.all(color: Colors.grey.shade300),
-            ),
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                Icon(
-                  Icons.broken_image_outlined, 
-                  size: 48, 
-                  color: Colors.grey[400]
-                ),
-                SizedBox(height: 8),
-                Text(
-                  '이미지를 불러올 수 없습니다',
-                  style: TextStyle(
-                    color: Colors.grey[600],
-                    fontSize: 14,
-                  ),
-                ),
-              ],
-            ),
-          );
-        },
-        loadingBuilder: (context, child, loadingProgress) {
-          if (loadingProgress == null) return child;
-          return Container(
-            height: 200,
-            decoration: BoxDecoration(
-              color: Colors.grey[50],
-              borderRadius: BorderRadius.circular(12),
-            ),
-            child: Center(
+    return Container(
+      width: double.infinity,
+      margin: EdgeInsets.symmetric(vertical: 12),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(12),
+        child: Image.network(
+          '${ApiConfig.baseUrl}$imageUrl',
+          fit: BoxFit.scaleDown, // 너비에 맞추고 높이는 자동 조절
+          alignment: Alignment.center,
+          errorBuilder: (context, error, stackTrace) {
+            return Container(
+              height: 200,
+              decoration: BoxDecoration(
+                color: Colors.grey[100],
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: Colors.grey.shade300),
+              ),
               child: Column(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  CircularProgressIndicator(
-                    value: loadingProgress.expectedTotalBytes != null
-                        ? loadingProgress.cumulativeBytesLoaded / 
-                          loadingProgress.expectedTotalBytes!
-                        : null,
+                  Icon(
+                      Icons.broken_image_outlined,
+                      size: 48,
+                      color: Colors.grey[400]
                   ),
-                  SizedBox(height: 12),
+                  SizedBox(height: 8),
                   Text(
-                    '이미지 로딩 중...',
+                    '이미지를 불러올 수 없습니다',
                     style: TextStyle(
                       color: Colors.grey[600],
                       fontSize: 14,
@@ -256,13 +163,44 @@ class _PostDetailScreenState extends State<PostDetailScreen> {
                   ),
                 ],
               ),
-            ),
-          );
-        },
+            );
+          },
+          loadingBuilder: (context, child, loadingProgress) {
+            if (loadingProgress == null) return child;
+            return Container(
+              height: 200,
+              decoration: BoxDecoration(
+                color: Colors.grey[50],
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: Center(
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    CircularProgressIndicator(
+                      value: loadingProgress.expectedTotalBytes != null
+                          ? loadingProgress.cumulativeBytesLoaded /
+                          loadingProgress.expectedTotalBytes!
+                          : null,
+                    ),
+                    SizedBox(height: 12),
+                    Text(
+                      '이미지 로딩 중...',
+                      style: TextStyle(
+                        color: Colors.grey[600],
+                        fontSize: 14,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            );
+          },
+        ),
       ),
-    ),
-  );
-}
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -335,7 +273,8 @@ class _PostDetailScreenState extends State<PostDetailScreen> {
                                 ),
                                 SizedBox(width: 8),
                                 Text(
-                                  _formatDateTime(post.createdAt),
+                                  // 수정된 부분: DateUtils의 상대 시간 함수 사용
+                                  DateUtilsCustom.DateUtils.formatRelativeTime(post.createdAt),
                                   style: TextStyle(
                                     color: Colors.grey[500],
                                     fontSize: 12,
@@ -344,7 +283,7 @@ class _PostDetailScreenState extends State<PostDetailScreen> {
                               ],
                             ),
                             SizedBox(height: 20),
-                            
+
                             Text(
                               post.content,
                               style: TextStyle(
@@ -352,12 +291,12 @@ class _PostDetailScreenState extends State<PostDetailScreen> {
                                 height: 1.5,
                               ),
                             ),
-                            
+
                             // 개선된 이미지 표시
                             _buildImageWidget(post.imageUrl),
-                            
+
                             SizedBox(height: 20),
-                            
+
                             // 좋아요/댓글 버튼
                             Row(
                               children: [
@@ -404,9 +343,9 @@ class _PostDetailScreenState extends State<PostDetailScreen> {
                           ],
                         ),
                       ),
-                      
+
                       Divider(thickness: 8, color: Colors.grey[100]),
-                      
+
                       // 댓글 섹션
                       Container(
                         padding: EdgeInsets.symmetric(horizontal: 20, vertical: 16),
@@ -418,7 +357,7 @@ class _PostDetailScreenState extends State<PostDetailScreen> {
                           ),
                         ),
                       ),
-                      
+
                       // 댓글 리스트
                       if (comments.isEmpty)
                         Container(
@@ -451,13 +390,13 @@ class _PostDetailScreenState extends State<PostDetailScreen> {
                             return _buildCommentItem(comment);
                           },
                         ),
-                      
+
                       SizedBox(height: 100), // 댓글 입력창 공간 확보
                     ],
                   ),
                 ),
               ),
-              
+
               // 댓글 입력창
               Container(
                 padding: EdgeInsets.all(16),
@@ -530,7 +469,7 @@ class _PostDetailScreenState extends State<PostDetailScreen> {
 
   Widget _buildCommentItem(Comment comment) {
     final isLiked = commentLikedStatus[comment.id] ?? false;
-    
+
     return Container(
       padding: EdgeInsets.symmetric(horizontal: 20, vertical: 12),
       child: Row(
@@ -560,7 +499,8 @@ class _PostDetailScreenState extends State<PostDetailScreen> {
                     ),
                     SizedBox(width: 8),
                     Text(
-                      _formatDateTime(comment.createdAt),
+                      // 수정된 부분: DateUtils의 상대 시간 함수 사용
+                      DateUtilsCustom.DateUtils.formatRelativeTime(comment.createdAt),
                       style: TextStyle(
                         color: Colors.grey[500],
                         fontSize: 12,
@@ -589,18 +529,18 @@ class _PostDetailScreenState extends State<PostDetailScreen> {
                           mainAxisSize: MainAxisSize.min,
                           children: [
                             Icon(
-                              isLiked ? Icons.thumb_up : Icons.thumb_up_outlined, 
-                              size: 14, 
-                              color: isLiked ? Colors.blue : Colors.grey[500]
+                                isLiked ? Icons.thumb_up : Icons.thumb_up_outlined,
+                                size: 14,
+                                color: isLiked ? Colors.blue : Colors.grey[500]
                             ),
                             SizedBox(width: 4),
                             Text(
-                              '${comment.likes}', 
-                              style: TextStyle(
-                                fontSize: 12, 
-                                color: isLiked ? Colors.blue : Colors.grey[500],
-                                fontWeight: isLiked ? FontWeight.bold : FontWeight.normal,
-                              )
+                                '${comment.likes}',
+                                style: TextStyle(
+                                  fontSize: 12,
+                                  color: isLiked ? Colors.blue : Colors.grey[500],
+                                  fontWeight: isLiked ? FontWeight.bold : FontWeight.normal,
+                                )
                             ),
                           ],
                         ),
