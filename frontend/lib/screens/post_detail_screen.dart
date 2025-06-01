@@ -126,14 +126,45 @@ class _PostDetailScreenState extends State<PostDetailScreen> {
 
   String _formatDateTime(DateTime dateTime) {
     final now = DateTime.now();
-    final difference = now.difference(dateTime);
 
-    if (difference.inMinutes < 60) {
+    // 시간대가 다를 수 있으므로 둘 다 로컬 시간으로 통일
+    final localDateTime = dateTime.isUtc ? dateTime.toLocal() : dateTime;
+    final localNow = now.isUtc ? now.toLocal() : now;
+
+    final difference = localNow.difference(localDateTime);
+
+    // 디버깅 로그 (개발 중에만 사용)
+    print('⏰ 시간 계산:');
+    print('   게시글: $localDateTime');
+    print('   현재: $localNow');
+    print('   차이: ${difference.inMinutes}분 (${difference.inSeconds}초)');
+
+    // 미래 시간 방지 (시간대 오류 대응)
+    if (difference.isNegative) {
+      final absDiff = difference.abs();
+      if (absDiff.inMinutes < 60) {
+        return '${absDiff.inMinutes}분 전';
+      } else if (absDiff.inHours < 24) {
+        return '${absDiff.inHours}시간 전';
+      } else {
+        return '${absDiff.inDays}일 전';
+      }
+    }
+
+    // 정상적인 과거 시간 계산
+    if (difference.inSeconds < 30) {
+      return '방금 전';
+    } else if (difference.inMinutes < 1) {
+      return '1분 미만';
+    } else if (difference.inMinutes < 60) {
       return '${difference.inMinutes}분 전';
     } else if (difference.inHours < 24) {
       return '${difference.inHours}시간 전';
+    } else if (difference.inDays < 7) {
+      return '${difference.inDays}일 전';
     } else {
-      return DateFormat('MM-dd HH:mm').format(dateTime);
+      // 일주일 이상은 구체적인 날짜 표시
+      return DateFormat('MM-dd HH:mm').format(localDateTime);
     }
   }
 
