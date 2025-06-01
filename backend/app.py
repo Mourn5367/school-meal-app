@@ -1,9 +1,9 @@
-# backend/app.py - 이미지 URL 수정 버전
+# backend/app.py - 한국 시간대로 통일
 from flask import Flask, jsonify, request, send_from_directory
 import psycopg2
 from psycopg2.extras import RealDictCursor
 from flask_cors import CORS
-from datetime import datetime
+from datetime import datetime, timezone, timedelta
 import os
 import base64
 import uuid
@@ -11,6 +11,9 @@ from werkzeug.utils import secure_filename
 
 app = Flask(__name__)
 CORS(app)
+
+# 한국 시간대 설정
+KST = timezone(timedelta(hours=9))
 
 # 업로드 설정
 UPLOAD_FOLDER = 'uploads'
@@ -37,6 +40,61 @@ def get_db_connection():
     )
     return conn
 
+# 한국 시간 변환 헬퍼 함수
+def convert_to_kst_string(dt):
+    """DateTime 객체나 문자열을 한국 시간 문자열로 변환"""
+    if dt is None:
+        return None
+    
+    # 문자열인 경우 먼저 DateTime으로 변환
+    if isinstance(dt, str):
+        try:
+            # RFC 2822 형식 처리
+            if ',' in dt and ('GMT' in dt or 'UTC' in dt):
+                from email.utils import parsedate_to_datetime
+                dt = parsedate_to_datetime(dt)
+            else:
+                dt = datetime.fromisoformat(dt.replace('Z', '+00:00'))
+        except Exception as e:
+            print(f"날짜 문자열 파싱 실패: {dt} - {e}")
+            return dt  # 파싱 실패하면 원본 반환
+    
+    # UTC 시간이면 KST로 변환
+    if dt.tzinfo is None:
+        # naive datetime은 UTC로 가정
+        dt = dt.replace(tzinfo=timezone.utc)
+    
+    kst_time = dt.astimezone(KST)
+    # ISO 8601 형식으로 반환 (시간대 정보 포함)
+    return kst_time.isoformat()
+
+# JSON 응답에서 시간 필드 변환
+def process_time_fields(data):
+    """응답 데이터의 시간 필드들을 한국 시간으로 변환"""
+    if isinstance(data, list):
+        return [process_time_fields(item) for item in data]
+    elif isinstance(data, dict):
+        result = data.copy()
+        
+        # 시간 관련 필드들 변환
+        time_fields = ['created_at', 'updated_at', 'date']
+        for field in time_fields:
+            if field in result and result[field] is not None:
+                if isinstance(result[field], datetime):
+                    result[field] = convert_to_kst_string(result[field])
+                elif isinstance(result[field], str):
+                    try:
+                        # 문자열을 datetime으로 파싱 후 KST 변환
+                        dt = datetime.fromisoformat(result[field].replace('Z', '+00:00'))
+                        result[field] = convert_to_kst_string(dt)
+                    except:
+                        # 파싱 실패하면 원본 유지
+                        pass
+        
+        return result
+    else:
+        return data
+
 @app.route('/')
 def hello():
     return "Hello, World!"
@@ -55,7 +113,10 @@ def get_menu():
         cur.close()
         conn.close()
         
-        return jsonify(list(menus))
+        # 시간 필드 변환
+        processed_menus = process_time_fields(list(menus))
+        
+        return jsonify(processed_menus)
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
@@ -77,7 +138,6 @@ def upload_image():
             
             file.save(filepath)
             
-            # 수정: /api 제거 (Flutter에서 ApiConfig.baseUrl과 합쳐질 때 중복 방지)
             image_url = f"/images/{unique_filename}"
             
             return jsonify({"image_url": image_url}), 201
@@ -94,7 +154,6 @@ def serve_image(filename):
         print(f"이미지 요청: {filename}")
         print(f"업로드 폴더: {app.config['UPLOAD_FOLDER']}")
         
-        # 파일 존재 확인
         filepath = os.path.join(app.config['UPLOAD_FOLDER'], filename)
         if not os.path.exists(filepath):
             print(f"파일이 존재하지 않음: {filepath}")
@@ -119,7 +178,6 @@ def upload_image_base64():
         
         print(f"이미지 업로드 요청: {filename}")
         
-        # Base64 디코딩
         try:
             if ',' in image_data:
                 image_data = image_data.split(',')[1]
@@ -129,29 +187,24 @@ def upload_image_base64():
         except Exception as e:
             return jsonify({"error": "Invalid base64 image data"}), 400
         
-        # 파일 확장자 검증
         file_ext = filename.rsplit('.', 1)[1].lower() if '.' in filename else ''
         if file_ext not in ALLOWED_EXTENSIONS:
             return jsonify({"error": "Invalid file type"}), 400
         
-        # 고유한 파일명 생성
         unique_filename = f"{uuid.uuid4().hex}.{file_ext}"
         filepath = os.path.join(app.config['UPLOAD_FOLDER'], unique_filename)
         
         print(f"저장할 파일 경로: {filepath}")
         
-        # 파일 저장
         with open(filepath, 'wb') as f:
             f.write(image_bytes)
         
-        # 파일이 실제로 저장되었는지 확인
         if os.path.exists(filepath):
             print(f"파일 저장 성공: {filepath}")
         else:
             print(f"파일 저장 실패: {filepath}")
             return jsonify({"error": "Failed to save image"}), 500
         
-        # 수정: /api 제거 (Flutter에서 ApiConfig.baseUrl과 합쳐질 때 중복 방지)
         image_url = f"/images/{unique_filename}"
         print(f"생성된 이미지 URL: {image_url}")
         
@@ -192,7 +245,10 @@ def get_posts():
         cur.close()
         conn.close()
         
-        return jsonify(list(posts))
+        # 시간 필드 변환
+        processed_posts = process_time_fields(list(posts))
+        
+        return jsonify(processed_posts)
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
@@ -210,9 +266,12 @@ def create_post():
         conn = get_db_connection()
         cur = conn.cursor(cursor_factory=RealDictCursor)
         
+        # 한국 시간으로 created_at 설정
+        kst_now = datetime.now(KST)
+        
         query = """
-        INSERT INTO posts (title, content, author, meal_date, meal_type, image_url)
-        VALUES (%s, %s, %s, %s, %s, %s)
+        INSERT INTO posts (title, content, author, meal_date, meal_type, image_url, created_at)
+        VALUES (%s, %s, %s, %s, %s, %s, %s)
         RETURNING *
         """
         
@@ -222,7 +281,8 @@ def create_post():
             data['author'],
             data['meal_date'],
             data['meal_type'],
-            data.get('image_url')
+            data.get('image_url'),
+            kst_now  # 한국 시간으로 저장
         ))
         
         new_post = cur.fetchone()
@@ -230,7 +290,10 @@ def create_post():
         cur.close()
         conn.close()
         
-        return jsonify(dict(new_post)), 201
+        # 시간 필드 변환
+        processed_post = process_time_fields(dict(new_post))
+        
+        return jsonify(processed_post), 201
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
@@ -266,7 +329,10 @@ def get_post_detail(post_id):
         result = dict(post)
         result['comments'] = list(comments)
         
-        return jsonify(result)
+        # 시간 필드 변환
+        processed_result = process_time_fields(result)
+        
+        return jsonify(processed_result)
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
@@ -338,20 +404,26 @@ def create_comment(post_id):
         conn = get_db_connection()
         cur = conn.cursor(cursor_factory=RealDictCursor)
         
+        # 한국 시간으로 created_at 설정
+        kst_now = datetime.now(KST)
+        
         query = """
-        INSERT INTO comments (post_id, content, author)
-        VALUES (%s, %s, %s)
+        INSERT INTO comments (post_id, content, author, created_at)
+        VALUES (%s, %s, %s, %s)
         RETURNING *, 0 as likes
         """
         
-        cur.execute(query, (post_id, data['content'], data['author']))
+        cur.execute(query, (post_id, data['content'], data['author'], kst_now))
         new_comment = cur.fetchone()
         
         conn.commit()
         cur.close()
         conn.close()
         
-        return jsonify(dict(new_comment)), 201
+        # 시간 필드 변환
+        processed_comment = process_time_fields(dict(new_comment))
+        
+        return jsonify(processed_comment), 201
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 

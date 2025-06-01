@@ -335,4 +335,4 @@ if __name__ == "__main__":
     # 스케줄러 실행
     while True:
         schedule.run_pending()
-        time.sleep(60)  # 1분마다 스케줄 확인
+        time.sleep(600)  # 1분마다 스케줄 확인
