@@ -1,12 +1,12 @@
-// frontend/lib/utils/date_utils.dart - 완전 수정 버전
+// frontend/lib/utils/date_utils.dart - 안드로이드 시간 문제 해결 버전
 import 'dart:io';
-
 
 class DateUtils {
   // RFC 2822 형식과 ISO 8601 형식 모두 처리
   static DateTime? parseDate(String dateStr) {
     try {
       print('🕐 시간 파싱 시작: $dateStr');
+      print('🤖 플랫폼: ${Platform.isAndroid ? "Android" : "기타"}');
 
       // RFC 2822 형식 처리 (예: "Sun, 01 Jun 2025 09:58:40 GMT")
       if (dateStr.contains(',') && dateStr.contains('GMT')) {
@@ -114,5 +114,3 @@ class DateUtils {
     return dateStr;
   }
 }
-
-// HttpDate import를 위해 필요한 import 추가

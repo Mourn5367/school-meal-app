@@ -6,7 +6,7 @@ import '../models/comment_model.dart';
 import '../services/api_service.dart';
 import '../config/api_config.dart';
 import 'package:intl/intl.dart';
-
+import 'dart:io';
 class PostDetailScreen extends StatefulWidget {
   final Post post;
 
@@ -127,27 +127,46 @@ class _PostDetailScreenState extends State<PostDetailScreen> {
   String _formatDateTime(DateTime dateTime) {
     final now = DateTime.now();
 
-    // 시간대가 다를 수 있으므로 둘 다 로컬 시간으로 통일
-    final localDateTime = dateTime.isUtc ? dateTime.toLocal() : dateTime;
-    final localNow = now.isUtc ? now.toLocal() : now;
+    print('=== 안드로이드 시간 계산 디버그 ===');
+    print('플랫폼: ${Platform.isAndroid ? "Android" : "기타"}');
+    print('원본 게시글 시간: $dateTime (UTC: ${dateTime.isUtc})');
+    print('현재 시간: $now (UTC: ${now.isUtc})');
 
-    final difference = localNow.difference(localDateTime);
+    // 안드로이드에서는 더 엄격한 시간 처리
+    DateTime finalPostTime;
+    DateTime finalNowTime;
 
-    // 디버깅 로그 (개발 중에만 사용)
-    print('⏰ 시간 계산:');
-    print('   게시글: $localDateTime');
-    print('   현재: $localNow');
-    print('   차이: ${difference.inMinutes}분 (${difference.inSeconds}초)');
+    if (Platform.isAndroid) {
+      // 안드로이드: 무조건 로컬 시간으로 통일
+      finalPostTime = dateTime.isUtc ? dateTime.toLocal() : dateTime;
+      finalNowTime = now.isUtc ? now.toLocal() : now;
 
-    // 미래 시간 방지 (시간대 오류 대응)
+      print('안드로이드 로컬 변환:');
+      print('  게시글: $finalPostTime');
+      print('  현재: $finalNowTime');
+    } else {
+      // 다른 플랫폼: 기존 방식
+      finalPostTime = dateTime;
+      finalNowTime = now;
+    }
+
+    final difference = finalNowTime.difference(finalPostTime);
+
+    print('최종 시간 차이: ${difference.inMinutes}분 (${difference.inHours}시간, ${difference.inDays}일)');
+    print('차이가 음수인가? ${difference.isNegative}');
+    print('================================');
+
+    // 미래 시간인 경우 (시간대 오류 대응)
     if (difference.isNegative) {
-      final absDiff = difference.abs();
-      if (absDiff.inMinutes < 60) {
-        return '${absDiff.inMinutes}분 전';
-      } else if (absDiff.inHours < 24) {
-        return '${absDiff.inHours}시간 전';
+      print('⚠️ 미래 시간 감지 - 절댓값으로 계산');
+      final absoluteDifference = difference.abs();
+
+      if (absoluteDifference.inMinutes < 60) {
+        return '${absoluteDifference.inMinutes}분 전';
+      } else if (absoluteDifference.inHours < 24) {
+        return '${absoluteDifference.inHours}시간 전';
       } else {
-        return '${absDiff.inDays}일 전';
+        return '${absoluteDifference.inDays}일 전';
       }
     }
 
@@ -164,7 +183,7 @@ class _PostDetailScreenState extends State<PostDetailScreen> {
       return '${difference.inDays}일 전';
     } else {
       // 일주일 이상은 구체적인 날짜 표시
-      return DateFormat('MM-dd HH:mm').format(localDateTime);
+      return DateFormat('MM-dd HH:mm').format(finalPostTime);
     }
   }
 
