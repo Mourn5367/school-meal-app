@@ -1,44 +1,67 @@
 services:
   db:
     image: postgres:13
-    volumes:
-      - ./database/data:/var/lib/postgresql/data
-      - ./database/init.sql:/docker-entrypoint-initdb.d/init.sql
+    container_name: schoolmeal_db
     environment:
       POSTGRES_USER: schoolmeal
       POSTGRES_PASSWORD: securepassword
       POSTGRES_DB: schoolmealdb
+      # PostgreSQL 설정 개선
+      POSTGRES_INITDB_ARGS: "--encoding=UTF-8 --lc-collate=C --lc-ctype=C"
     ports:
       - "5432:5432"
+    volumes:
+      # 명명된 볼륨 사용 (더 안정적)
+      - postgres_data:/var/lib/postgresql/data
+      - ./database/init.sql:/docker-entrypoint-initdb.d/init.sql
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U schoolmeal -d schoolmealdb"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 30s
+    networks:
+      - schoolmeal_network
       
   backend:
     build: ./backend
+    container_name: schoolmeal_backend
     ports:
       - "5000:5000"
     depends_on:
-      - db
+      db:
+        condition: service_healthy
     environment:
       - DATABASE_URL=postgresql://schoolmeal:securepassword@db:5432/schoolmealdb
     volumes:
-      - ./backend/uploads:/app/uploads  # 이미지 업로드 폴더 볼륨 추가
+      - ./backend/uploads:/app/uploads
+    networks:
+      - schoolmeal_network
+    restart: unless-stopped
 
   frontend:
     build: ./frontend
+    container_name: schoolmeal_frontend
     ports:
       - "80:80"
     depends_on:
       - backend
+    networks:
+      - schoolmeal_network
+    restart: unless-stopped
       
-  # Selenium Grid Hub 추가
   selenium-hub:
     image: selenium/hub:4.10.0
     container_name: selenium-hub
     ports:
       - "4444:4444"
+    networks:
+      - schoolmeal_network
       
-  # Chrome 노드 추가
   chrome:
     image: selenium/node-chrome:4.10.0
+    container_name: selenium-chrome
     depends_on:
       - selenium-hub
     environment:
@@ -47,15 +70,29 @@ services:
       - SE_EVENT_BUS_SUBSCRIBE_PORT=4443
     volumes:
       - /dev/shm:/dev/shm
+    networks:
+      - schoolmeal_network
       
-  # 크롤러 서비스 업데이트
   crawler:
     build: ./crawler
+    container_name: schoolmeal_crawler
     depends_on:
-      - db
+      db:
+        condition: service_healthy
     environment:
       - DB_HOST=db
       - DB_NAME=schoolmealdb
       - DB_USER=schoolmeal
       - DB_PASSWORD=securepassword
-    restart: on-failure  # 실패 시 재시작
+    networks:
+      - schoolmeal_network
+    restart: on-failure:3
+
+# 명명된 볼륨 정의 (더 안정적)
+volumes:
+  postgres_data:
+    driver: local
+
+networks:
+  schoolmeal_network:
+    driver: bridge
