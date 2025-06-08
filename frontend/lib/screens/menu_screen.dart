@@ -1,4 +1,3 @@
-// frontend/lib/screens/menu_screen.dart - 캐시 기능 포함 버전
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../services/cached_api_service.dart';
