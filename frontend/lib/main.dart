@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'screens/home_screen.dart';
-import 'services/api_service.dart';
+import 'services/cached_api_service.dart'; // ApiService 대신 CachedApiService import
 
 void main() {
   runApp(MyApp());
@@ -11,8 +11,8 @@ void main() {
 class MyApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
-    return Provider<ApiService>(
-      create: (_) => ApiService(),
+    return Provider<CachedApiService>( // ApiService 대신 CachedApiService 사용
+      create: (_) => CachedApiService(),
       child: MaterialApp(
         title: '학식 메뉴 앱',
         theme: ThemeData(

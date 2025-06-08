@@ -1,3 +1,4 @@
+// frontend/lib/screens/menu_screen.dart - 초기화 오류 수정 버전
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../services/cached_api_service.dart';
@@ -15,40 +16,44 @@ class _MenuScreenState extends State<MenuScreen> {
   late Future<Map<String, List<Meal>>> _weeklyMealsFuture;
   bool _isRefreshing = false;
   Map<String, dynamic>? _cacheStatus;
-  
+
   @override
   void initState() {
     super.initState();
-    _loadWeeklyMeals();
+    // 여기서 직접 Future를 초기화
+    _weeklyMealsFuture = _fetchWeeklyMeals();
     _checkCacheStatus();
   }
-  
+
   Future<void> _checkCacheStatus() async {
     final apiService = Provider.of<CachedApiService>(context, listen: false);
     final status = await apiService.getCacheStatus();
-    setState(() {
-      _cacheStatus = status;
-    });
+    if (mounted) {
+      setState(() {
+        _cacheStatus = status;
+      });
+    }
   }
-  
-  Future<Map<String, List<Meal>>> _loadWeeklyMeals() async {
+
+  // 실제 데이터를 가져오는 메서드 (메서드명 변경)
+  Future<Map<String, List<Meal>>> _fetchWeeklyMeals() async {
     final apiService = Provider.of<CachedApiService>(context, listen: false);
     final meals = await apiService.getMeals();
-    
+
     // 현재 날짜 구하기
     final today = DateTime.now();
-    
+
     // 현재 날짜 이후의 메뉴만 필터링하고, 주말(토, 일) 제외
     final filteredMeals = meals.where((meal) {
       final mealDate = DateUtilsCustom.DateUtils.parseDate(meal.date);
       if (mealDate == null) return false;
-      
+
       final isWeekend = mealDate.weekday == 6 || mealDate.weekday == 7;
       final isToday = mealDate.isAfter(today.subtract(Duration(days: 1)));
-      
+
       return isToday && !isWeekend;
     }).toList();
-    
+
     // 날짜별로 그룹화
     Map<String, List<Meal>> groupedMeals = {};
     for (var meal in filteredMeals) {
@@ -61,7 +66,7 @@ class _MenuScreenState extends State<MenuScreen> {
         groupedMeals[dateKey]!.add(meal);
       }
     }
-    
+
     // 날짜순으로 정렬
     var sortedKeys = groupedMeals.keys.toList()..sort();
     Map<String, List<Meal>> sortedGroupedMeals = {};
@@ -73,45 +78,50 @@ class _MenuScreenState extends State<MenuScreen> {
         return (mealOrder[a.mealType] ?? 4).compareTo(mealOrder[b.mealType] ?? 4);
       });
     }
-    
+
     return sortedGroupedMeals;
   }
-  
+
+  // UI에서 새로고침을 트리거하는 메서드 (메서드명 변경)
   Future<void> _refreshData({bool forceRefresh = false}) async {
     if (_isRefreshing) return;
-    
+
     setState(() {
       _isRefreshing = true;
     });
 
     try {
       final apiService = Provider.of<CachedApiService>(context, listen: false);
-      
+
       if (forceRefresh) {
         // 강제 새로고침 (캐시 삭제 후 네트워크에서 가져오기)
         await apiService.refreshMeals();
       }
-      
+
       setState(() {
-        _weeklyMealsFuture = _loadWeeklyMeals();
+        _weeklyMealsFuture = _fetchWeeklyMeals(); // 새로운 Future 생성
       });
-      
+
       await _checkCacheStatus();
     } catch (e) {
       print('새로고침 오류: $e');
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('새로고침 중 오류가 발생했습니다'),
-          backgroundColor: Colors.red,
-        ),
-      );
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('새로고침 중 오류가 발생했습니다'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
     } finally {
-      setState(() {
-        _isRefreshing = false;
-      });
+      if (mounted) {
+        setState(() {
+          _isRefreshing = false;
+        });
+      }
     }
   }
-  
+
   String _formatDateHeader(String dateStr) {
     try {
       final date = DateTime.parse(dateStr);
@@ -123,7 +133,7 @@ class _MenuScreenState extends State<MenuScreen> {
       return dateStr;
     }
   }
-  
+
   Color _getWeekdayColor(String dateStr) {
     try {
       final date = DateTime.parse(dateStr);
@@ -174,9 +184,9 @@ class _MenuScreenState extends State<MenuScreen> {
           SizedBox(width: 8),
           Expanded(
             child: Text(
-              isValid 
-                ? '오프라인 모드 - 캐시된 메뉴 ($itemCount개 항목)'
-                : '캐시된 데이터 사용 중 (${daysOld}일 전)',
+              isValid
+                  ? '오프라인 모드 - 캐시된 메뉴 ($itemCount개 항목)'
+                  : '캐시된 데이터 사용 중 (${daysOld}일 전)',
               style: TextStyle(
                 fontSize: 12,
                 color: isValid ? Colors.green[700] : Colors.orange[700],
@@ -206,14 +216,14 @@ class _MenuScreenState extends State<MenuScreen> {
       ),
     );
   }
-  
+
   @override
   Widget build(BuildContext context) {
     return Column(
       children: [
         // 캐시 상태 표시
         _buildCacheStatusWidget(),
-        
+
         // 메인 컨텐츠
         Expanded(
           child: RefreshIndicator(
@@ -258,13 +268,13 @@ class _MenuScreenState extends State<MenuScreen> {
                           children: [
                             ElevatedButton(
                               onPressed: _isRefreshing ? null : () => _refreshData(forceRefresh: false),
-                              child: _isRefreshing 
-                                ? SizedBox(
-                                    width: 16,
-                                    height: 16,
-                                    child: CircularProgressIndicator(strokeWidth: 2),
-                                  )
-                                : Text('다시 시도'),
+                              child: _isRefreshing
+                                  ? SizedBox(
+                                width: 16,
+                                height: 16,
+                                child: CircularProgressIndicator(strokeWidth: 2),
+                              )
+                                  : Text('다시 시도'),
                             ),
                             SizedBox(width: 12),
                             OutlinedButton(
@@ -294,14 +304,14 @@ class _MenuScreenState extends State<MenuScreen> {
                   );
                 } else {
                   final weeklyMeals = snapshot.data!;
-                  
+
                   return ListView.builder(
                     padding: EdgeInsets.all(16),
                     itemCount: weeklyMeals.length,
                     itemBuilder: (context, index) {
                       final date = weeklyMeals.keys.elementAt(index);
                       final mealsForDay = weeklyMeals[date]!;
-                      
+
                       return Card(
                         margin: EdgeInsets.only(bottom: 12),
                         elevation: 4,
@@ -370,7 +380,7 @@ class _MenuScreenState extends State<MenuScreen> {
       ],
     );
   }
-  
+
   Widget _buildMealItem(Meal meal) {
     return Container(
       margin: EdgeInsets.symmetric(horizontal: 16, vertical: 8),
