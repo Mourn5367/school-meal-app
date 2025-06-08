@@ -1,9 +1,9 @@
-// frontend/lib/screens/meal_board_screen.dart - 시간 표시 개선
+// frontend/lib/screens/meal_board_screen.dart - 캐시 서비스 적용
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../models/meal_model.dart';
 import '../models/post_model.dart';
-import '../services/api_service.dart';
+import '../services/cached_api_service.dart';
 import 'post_detail_screen.dart';
 import 'post_create_screen.dart';
 import '../utils/date_utils.dart' as DateUtilsCustom;
@@ -39,7 +39,7 @@ class _MealBoardScreenState extends State<MealBoardScreen> {
 
   Future<List<Post>> _fetchPosts() async {
     try {
-      final apiService = Provider.of<ApiService>(context, listen: false);
+      final apiService = Provider.of<CachedApiService>(context, listen: false);
 
       // 날짜를 API 형식으로 변환
       final formattedDate = DateUtilsCustom.DateUtils.formatToApiDate(widget.date);
@@ -219,7 +219,7 @@ class _MealBoardScreenState extends State<MealBoardScreen> {
                           child: Column(
                             mainAxisAlignment: MainAxisAlignment.center,
                             children: [
-                              Icon(Icons.error_outline, size: 48, color: Colors.red),
+                              Icon(Icons.wifi_off, size: 48, color: Colors.orange),
                               SizedBox(height: 16),
                               Text(
                                 '게시글을 불러올 수 없습니다.',
@@ -227,7 +227,7 @@ class _MealBoardScreenState extends State<MealBoardScreen> {
                               ),
                               SizedBox(height: 8),
                               Text(
-                                '${snapshot.error}',
+                                '인터넷 연결을 확인해주세요.',
                                 style: TextStyle(fontSize: 12, color: Colors.grey[600]),
                                 textAlign: TextAlign.center,
                               ),
@@ -343,7 +343,6 @@ class _MealBoardScreenState extends State<MealBoardScreen> {
                   ),
                   SizedBox(width: 8),
                   Text(
-                    // 수정된 부분: DateUtils의 상대 시간 함수 사용
                     DateUtilsCustom.DateUtils.formatRelativeTime(post.createdAt),
                     style: TextStyle(
                       fontSize: 12,

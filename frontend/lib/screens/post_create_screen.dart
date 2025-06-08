@@ -1,9 +1,9 @@
-// frontend/lib/screens/post_create_screen.dart - 스크롤 개선 버전
+// frontend/lib/screens/post_create_screen.dart - 캐시 서비스 적용
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:image_picker/image_picker.dart';
-import '../services/api_service.dart';
+import '../services/cached_api_service.dart';
 import '../models/meal_model.dart';
 import '../utils/date_utils.dart' as DateUtilsCustom;
 
@@ -184,7 +184,7 @@ class _PostCreateScreenState extends State<PostCreateScreen> {
     });
 
     try {
-      final apiService = Provider.of<ApiService>(context, listen: false);
+      final apiService = Provider.of<CachedApiService>(context, listen: false);
 
       // 이미지가 있다면 먼저 업로드
       String? imageUrl;
@@ -224,13 +224,20 @@ class _PostCreateScreenState extends State<PostCreateScreen> {
       Navigator.pop(context, true);
     } catch (e) {
       print('게시글 작성 오류: $e');
+      
+      // 네트워크 오류인 경우 특별한 메시지 표시
+      String errorMessage = '게시글 작성 중 오류가 발생했습니다';
+      if (e.toString().contains('network') || e.toString().contains('connection')) {
+        errorMessage = '인터넷 연결을 확인해주세요';
+      }
+      
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Row(
             children: [
               Icon(Icons.error, color: Colors.white),
               SizedBox(width: 8),
-              Expanded(child: Text('게시글 작성 중 오류가 발생했습니다: $e')),
+              Expanded(child: Text(errorMessage)),
             ],
           ),
           backgroundColor: Colors.red,
@@ -270,7 +277,7 @@ class _PostCreateScreenState extends State<PostCreateScreen> {
               builder: (context, constraints) {
                 return Image.file(
                   _selectedImage!,
-                  fit: BoxFit.scaleDown, // 이미지가 작으면 원본 크기, 크면 축소
+                  fit: BoxFit.scaleDown,
                   alignment: Alignment.center,
                   errorBuilder: (context, error, stackTrace) {
                     return Container(
@@ -377,7 +384,7 @@ class _PostCreateScreenState extends State<PostCreateScreen> {
             )
           : Form(
               key: _formKey,
-              child: SingleChildScrollView( // 스크롤 가능하도록 추가
+              child: SingleChildScrollView(
                 padding: EdgeInsets.all(16.0),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -509,7 +516,7 @@ class _PostCreateScreenState extends State<PostCreateScreen> {
                     
                     // 내용 입력 - 고정 높이로 변경하여 스크롤 가능하게 함
                     Container(
-                      height: 300, // 고정 높이 설정
+                      height: 300,
                       child: TextFormField(
                         controller: _contentController,
                         decoration: InputDecoration(
@@ -534,7 +541,7 @@ class _PostCreateScreenState extends State<PostCreateScreen> {
                       ),
                     ),
                     
-                    // 하단 여백 추가 (키보드가 올라올 때를 위해)
+                    // 하단 여백 추가
                     SizedBox(height: 100),
                   ],
                 ),

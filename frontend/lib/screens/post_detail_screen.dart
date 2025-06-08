@@ -1,9 +1,9 @@
-// frontend/lib/screens/post_detail_screen.dart - 시간 표시 개선
+// frontend/lib/screens/post_detail_screen.dart - 캐시 서비스 적용
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../models/post_model.dart';
 import '../models/comment_model.dart';
-import '../services/api_service.dart';
+import '../services/cached_api_service.dart';
 import '../config/api_config.dart';
 import '../utils/date_utils.dart' as DateUtilsCustom;
 
@@ -22,7 +22,7 @@ class _PostDetailScreenState extends State<PostDetailScreen> {
   TextEditingController _authorController = TextEditingController();
   bool isLiked = false;
   int likeCount = 0;
-  Map<int, bool> commentLikedStatus = {}; // 댓글별 좋아요 상태
+  Map<int, bool> commentLikedStatus = {};
 
   @override
   void initState() {
@@ -39,7 +39,7 @@ class _PostDetailScreenState extends State<PostDetailScreen> {
 
   Future<Map<String, dynamic>> _fetchPostDetail() async {
     try {
-      final apiService = Provider.of<ApiService>(context, listen: false);
+      final apiService = Provider.of<CachedApiService>(context, listen: false);
       return await apiService.getPostDetail(widget.post.id);
     } catch (e) {
       print('게시글 상세 조회 오류: $e');
@@ -53,7 +53,7 @@ class _PostDetailScreenState extends State<PostDetailScreen> {
 
   Future<void> _toggleLike() async {
     try {
-      final apiService = Provider.of<ApiService>(context, listen: false);
+      final apiService = Provider.of<CachedApiService>(context, listen: false);
       final result = await apiService.togglePostLike(widget.post.id);
 
       setState(() {
@@ -63,14 +63,23 @@ class _PostDetailScreenState extends State<PostDetailScreen> {
     } catch (e) {
       print('좋아요 처리 오류: $e');
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('좋아요 처리 중 오류가 발생했습니다')),
+        SnackBar(
+          content: Row(
+            children: [
+              Icon(Icons.wifi_off, color: Colors.white),
+              SizedBox(width: 8),
+              Text('인터넷 연결을 확인해주세요'),
+            ],
+          ),
+          backgroundColor: Colors.orange,
+        ),
       );
     }
   }
 
   Future<void> _toggleCommentLike(int commentId, int currentLikes) async {
     try {
-      final apiService = Provider.of<ApiService>(context, listen: false);
+      final apiService = Provider.of<CachedApiService>(context, listen: false);
       final result = await apiService.toggleCommentLike(commentId);
 
       setState(() {
@@ -83,7 +92,16 @@ class _PostDetailScreenState extends State<PostDetailScreen> {
     } catch (e) {
       print('댓글 좋아요 처리 오류: $e');
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('댓글 좋아요 처리 중 오류가 발생했습니다')),
+        SnackBar(
+          content: Row(
+            children: [
+              Icon(Icons.wifi_off, color: Colors.white),
+              SizedBox(width: 8),
+              Text('인터넷 연결을 확인해주세요'),
+            ],
+          ),
+          backgroundColor: Colors.orange,
+        ),
       );
     }
   }
@@ -97,7 +115,7 @@ class _PostDetailScreenState extends State<PostDetailScreen> {
     }
 
     try {
-      final apiService = Provider.of<ApiService>(context, listen: false);
+      final apiService = Provider.of<CachedApiService>(context, listen: false);
       await apiService.createComment(
         postId: widget.post.id,
         content: _commentController.text.trim(),
@@ -114,12 +132,30 @@ class _PostDetailScreenState extends State<PostDetailScreen> {
       _loadPostDetail();
 
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('댓글이 작성되었습니다')),
+        SnackBar(
+          content: Row(
+            children: [
+              Icon(Icons.check_circle, color: Colors.white),
+              SizedBox(width: 8),
+              Text('댓글이 작성되었습니다'),
+            ],
+          ),
+          backgroundColor: Colors.green,
+        ),
       );
     } catch (e) {
       print('댓글 작성 오류: $e');
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('댓글 작성 중 오류가 발생했습니다')),
+        SnackBar(
+          content: Row(
+            children: [
+              Icon(Icons.wifi_off, color: Colors.white),
+              SizedBox(width: 8),
+              Text('인터넷 연결을 확인해주세요'),
+            ],
+          ),
+          backgroundColor: Colors.orange,
+        ),
       );
     }
   }
@@ -135,7 +171,7 @@ class _PostDetailScreenState extends State<PostDetailScreen> {
         borderRadius: BorderRadius.circular(12),
         child: Image.network(
           '${ApiConfig.baseUrl}$imageUrl',
-          fit: BoxFit.scaleDown, // 너비에 맞추고 높이는 자동 조절
+          fit: BoxFit.scaleDown,
           alignment: Alignment.center,
           errorBuilder: (context, error, stackTrace) {
             return Container(
@@ -223,10 +259,15 @@ class _PostDetailScreenState extends State<PostDetailScreen> {
               child: Column(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  Icon(Icons.error_outline, size: 48, color: Colors.red),
+                  Icon(Icons.wifi_off, size: 48, color: Colors.orange),
                   SizedBox(height: 16),
                   Text('게시글을 불러올 수 없습니다.'),
                   SizedBox(height: 8),
+                  Text(
+                    '인터넷 연결을 확인해주세요',
+                    style: TextStyle(color: Colors.grey[600]),
+                  ),
+                  SizedBox(height: 16),
                   ElevatedButton(
                     onPressed: _loadPostDetail,
                     child: Text('다시 시도'),
@@ -273,7 +314,6 @@ class _PostDetailScreenState extends State<PostDetailScreen> {
                                 ),
                                 SizedBox(width: 8),
                                 Text(
-                                  // 수정된 부분: DateUtils의 상대 시간 함수 사용
                                   DateUtilsCustom.DateUtils.formatRelativeTime(post.createdAt),
                                   style: TextStyle(
                                     color: Colors.grey[500],
@@ -499,7 +539,6 @@ class _PostDetailScreenState extends State<PostDetailScreen> {
                     ),
                     SizedBox(width: 8),
                     Text(
-                      // 수정된 부분: DateUtils의 상대 시간 함수 사용
                       DateUtilsCustom.DateUtils.formatRelativeTime(comment.createdAt),
                       style: TextStyle(
                         color: Colors.grey[500],
