@@ -155,66 +155,65 @@ class _MenuScreenState extends State<MenuScreen> {
 
   // 캐시 상태 표시 위젯
   Widget _buildCacheStatusWidget() {
-    if (_cacheStatus == null) return SizedBox.shrink();
+  if (_cacheStatus == null) return SizedBox.shrink();
 
-    final isValid = _cacheStatus!['isValid'] ?? false;
-    final exists = _cacheStatus!['exists'] ?? false;
-    final itemCount = _cacheStatus!['itemCount'] ?? 0;
-    final daysOld = _cacheStatus!['daysOld'] ?? 0;
+  final isValid = _cacheStatus!['isValid'] ?? false;
+  final exists = _cacheStatus!['exists'] ?? false;
+  final daysOld = _cacheStatus!['daysOld'] ?? 0;
 
-    if (!exists) return SizedBox.shrink();
+  if (!exists) return SizedBox.shrink();
 
-    return Container(
-      margin: EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-      padding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-      decoration: BoxDecoration(
-        color: isValid ? Colors.green.withOpacity(0.1) : Colors.orange.withOpacity(0.1),
-        borderRadius: BorderRadius.circular(8),
-        border: Border.all(
-          color: isValid ? Colors.green.withOpacity(0.3) : Colors.orange.withOpacity(0.3),
+  return Container(
+    margin: EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+    padding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+    decoration: BoxDecoration(
+      color: isValid ? Colors.green.withOpacity(0.1) : Colors.orange.withOpacity(0.1),
+      borderRadius: BorderRadius.circular(8),
+      border: Border.all(
+        color: isValid ? Colors.green.withOpacity(0.3) : Colors.orange.withOpacity(0.3),
+      ),
+    ),
+    child: Row(
+      children: [
+        Icon(
+          isValid ? Icons.wifi_off : Icons.update,
+          size: 16,
+          color: isValid ? Colors.green : Colors.orange,
         ),
-      ),
-      child: Row(
-        children: [
-          Icon(
-            isValid ? Icons.wifi_off : Icons.update,
-            size: 16,
-            color: isValid ? Colors.green : Colors.orange,
-          ),
-          SizedBox(width: 8),
-          Expanded(
-            child: Text(
-              isValid
-                  ? '오프라인 모드 - 캐시된 메뉴 ($itemCount개 항목)'
-                  : '캐시된 데이터 사용 중 (${daysOld}일 전)',
-              style: TextStyle(
-                fontSize: 12,
-                color: isValid ? Colors.green[700] : Colors.orange[700],
-              ),
+        SizedBox(width: 8),
+        Expanded(
+          child: Text(
+            isValid
+                ? '오프라인 모드' // 간단하게
+                : '${daysOld}일 전 데이터 사용 중', // 더 명확하게
+            style: TextStyle(
+              fontSize: 12,
+              color: isValid ? Colors.green[700] : Colors.orange[700],
             ),
           ),
-          if (!isValid)
-            InkWell(
-              onTap: () => _refreshData(forceRefresh: true),
-              child: Container(
-                padding: EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                decoration: BoxDecoration(
-                  color: Colors.orange,
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                child: Text(
-                  '새로고침',
-                  style: TextStyle(
-                    color: Colors.white,
-                    fontSize: 10,
-                    fontWeight: FontWeight.bold,
-                  ),
+        ),
+        if (!isValid)
+          InkWell(
+            onTap: () => _refreshData(forceRefresh: true),
+            child: Container(
+              padding: EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+              decoration: BoxDecoration(
+                color: Colors.orange,
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: Text(
+                '새로고침',
+                style: TextStyle(
+                  color: Colors.white,
+                  fontSize: 10,
+                  fontWeight: FontWeight.bold,
                 ),
               ),
             ),
-        ],
-      ),
-    );
+          ),
+      ],
+    ),
+  );
   }
 
   @override

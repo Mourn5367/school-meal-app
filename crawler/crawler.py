@@ -72,7 +72,6 @@ def is_weekend(date_str):
 # 날짜 문자열 파싱 함수
 def parse_date(date_str, index=0):
     """날짜 문자열을 파싱하여 YYYY-MM-DD 형식으로 반환합니다."""
-    # 날짜 형식 확인
     logger.info(f"파싱할 날짜 문자열: {date_str}")
     
     # YYYY-MM-DD 형식인 경우
@@ -82,19 +81,25 @@ def parse_date(date_str, index=0):
     if match:
         return match.group(1)
     
-    # 요일만 있는 경우, 현재 날짜로부터 요일에 맞게 계산
+    # 요일만 있는 경우, 이번주 기준으로 계산
     weekday_map = {'월요일': 0, '화요일': 1, '수요일': 2, '목요일': 3, '금요일': 4, '토요일': 5, '일요일': 6}
     if date_str in weekday_map:
         today = datetime.now()
         today_weekday = today.weekday()  # 0=월요일, 1=화요일, ...
         target_weekday = weekday_map[date_str]
-        days_diff = (target_weekday - today_weekday) % 7
-        target_date = today + timedelta(days=days_diff)
+        
+        # 이번주 해당 요일의 날짜 계산
+        days_from_monday = target_weekday  # 월요일부터 며칠째인지
+        this_monday = today - timedelta(days=today_weekday)  # 이번주 월요일
+        target_date = this_monday + timedelta(days=days_from_monday)
+        
+        logger.info(f"요일 '{date_str}' -> 이번주 {target_date.strftime('%Y-%m-%d')}")
         return target_date.strftime('%Y-%m-%d')
     
     # 다른 형식이거나 날짜를 찾을 수 없는 경우, 현재 날짜 + 인덱스를 사용
     today = datetime.now()
     target_date = today + timedelta(days=index)
+    logger.warning(f"날짜 파싱 실패, 기본값 사용: {target_date.strftime('%Y-%m-%d')}")
     return target_date.strftime('%Y-%m-%d')
 
 # 크롤링 함수
