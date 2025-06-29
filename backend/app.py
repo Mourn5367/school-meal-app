@@ -9,6 +9,10 @@ import base64
 import uuid
 from werkzeug.utils import secure_filename
 
+import hashlib
+import secrets
+from datetime import datetime, timedelta
+
 app = Flask(__name__)
 CORS(app)
 
@@ -474,6 +478,387 @@ def toggle_comment_like(comment_id):
         })
     except Exception as e:
         return jsonify({"error": str(e)}), 500
+# 비밀번호 해시 함수
+def hash_password(password):
+    """비밀번호를 SHA-256으로 해시화"""
+    return hashlib.sha256(password.encode()).hexdigest()
 
+def verify_password(password, hashed):
+    """비밀번호 검증"""
+    return hash_password(password) == hashed
+
+# 세션 토큰 생성
+def generate_session_token():
+    """세션 토큰 생성"""
+    return secrets.token_urlsafe(32)
+
+# 회원가입 API
+@app.route('/api/auth/register', methods=['POST'])
+def register():
+    """회원가입"""
+    try:
+        data = request.get_json()
+        
+        required_fields = ['username', 'password', 'email']
+        for field in required_fields:
+            if field not in data:
+                return jsonify({"error": f"{field} is required"}), 400
+        
+        username = data['username']
+        password = data['password']
+        email = data['email']
+        
+        # 비밀번호 길이 검증
+        if len(password) < 6:
+            return jsonify({"error": "Password must be at least 6 characters"}), 400
+        
+        conn = get_db_connection()
+        cur = conn.cursor(cursor_factory=RealDictCursor)
+        
+        # 중복 확인
+        cur.execute("SELECT id FROM users WHERE username = %s OR email = %s", (username, email))
+        if cur.fetchone():
+            return jsonify({"error": "Username or email already exists"}), 409
+        
+        # 사용자 생성
+        hashed_password = hash_password(password)
+        kst_now = datetime.now(KST)
+        
+        cur.execute("""
+            INSERT INTO users (username, password, email, created_at)
+            VALUES (%s, %s, %s, %s)
+            RETURNING id, username, email, created_at
+        """, (username, hashed_password, email, kst_now))
+        
+        new_user = cur.fetchone()
+        conn.commit()
+        cur.close()
+        conn.close()
+        
+        return jsonify({
+            "message": "User registered successfully",
+            "user": dict(new_user)
+        }), 201
+        
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+# 로그인 API
+@app.route('/api/auth/login', methods=['POST'])
+def login():
+    """로그인"""
+    try:
+        data = request.get_json()
+        
+        if 'username' not in data or 'password' not in data:
+            return jsonify({"error": "Username and password are required"}), 400
+        
+        username = data['username']
+        password = data['password']
+        
+        conn = get_db_connection()
+        cur = conn.cursor(cursor_factory=RealDictCursor)
+        
+        # 사용자 조회
+        cur.execute("SELECT id, username, password, email FROM users WHERE username = %s", (username,))
+        user = cur.fetchone()
+        
+        if not user or not verify_password(password, user['password']):
+            return jsonify({"error": "Invalid username or password"}), 401
+        
+        # 세션 토큰 생성 및 저장
+        session_token = generate_session_token()
+        expires_at = datetime.now(KST) + timedelta(days=7)  # 7일 후 만료
+        
+        cur.execute("""
+            INSERT INTO user_sessions (user_id, session_token, expires_at, created_at)
+            VALUES (%s, %s, %s, %s)
+        """, (user['id'], session_token, expires_at, datetime.now(KST)))
+        
+        conn.commit()
+        cur.close()
+        conn.close()
+        
+        return jsonify({
+            "message": "Login successful",
+            "user": {
+                "id": user['id'],
+                "username": user['username'],
+                "email": user['email']
+            },
+            "session_token": session_token
+        }), 200
+        
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+# 로그아웃 API
+@app.route('/api/auth/logout', methods=['POST'])
+def logout():
+    """로그아웃"""
+    try:
+        data = request.get_json()
+        session_token = data.get('session_token')
+        
+        if not session_token:
+            return jsonify({"error": "Session token is required"}), 400
+        
+        conn = get_db_connection()
+        cur = conn.cursor()
+        
+        # 세션 삭제
+        cur.execute("DELETE FROM user_sessions WHERE session_token = %s", (session_token,))
+        
+        conn.commit()
+        cur.close()
+        conn.close()
+        
+        return jsonify({"message": "Logout successful"}), 200
+        
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+# 세션 검증 함수
+def verify_session(session_token):
+    """세션 토큰 검증"""
+    try:
+        conn = get_db_connection()
+        cur = conn.cursor(cursor_factory=RealDictCursor)
+        
+        cur.execute("""
+            SELECT u.id, u.username, u.email 
+            FROM users u
+            JOIN user_sessions s ON u.id = s.user_id
+            WHERE s.session_token = %s AND s.expires_at > %s
+        """, (session_token, datetime.now(KST)))
+        
+        user = cur.fetchone()
+        cur.close()
+        conn.close()
+        
+        return dict(user) if user else None
+        
+    except Exception as e:
+        print(f"Session verification error: {e}")
+        return None
+
+# ===== 게시글 수정/삭제 API =====
+
+# 게시글 수정 API
+@app.route('/api/posts/<int:post_id>', methods=['PUT'])
+def update_post(post_id):
+    """게시글 수정"""
+    try:
+        data = request.get_json()
+        
+        # 세션 검증
+        session_token = data.get('session_token')
+        if not session_token:
+            return jsonify({"error": "Session token is required"}), 401
+        
+        user = verify_session(session_token)
+        if not user:
+            return jsonify({"error": "Invalid or expired session"}), 401
+        
+        conn = get_db_connection()
+        cur = conn.cursor(cursor_factory=RealDictCursor)
+        
+        # 게시글 존재 및 작성자 확인
+        cur.execute("SELECT author FROM posts WHERE id = %s", (post_id,))
+        post = cur.fetchone()
+        
+        if not post:
+            return jsonify({"error": "Post not found"}), 404
+        
+        if post['author'] != user['username']:
+            return jsonify({"error": "You can only edit your own posts"}), 403
+        
+        # 수정할 필드들
+        title = data.get('title')
+        content = data.get('content')
+        image_url = data.get('image_url')
+        
+        update_fields = []
+        update_values = []
+        
+        if title:
+            update_fields.append("title = %s")
+            update_values.append(title)
+        
+        if content:
+            update_fields.append("content = %s")
+            update_values.append(content)
+        
+        if image_url is not None:  # None과 빈 문자열 구분
+            update_fields.append("image_url = %s")
+            update_values.append(image_url)
+        
+        if not update_fields:
+            return jsonify({"error": "No fields to update"}), 400
+        
+        # 수정 시간 추가
+        update_fields.append("updated_at = %s")
+        update_values.append(datetime.now(KST))
+        update_values.append(post_id)
+        
+        query = f"UPDATE posts SET {', '.join(update_fields)} WHERE id = %s RETURNING *"
+        cur.execute(query, update_values)
+        
+        updated_post = cur.fetchone()
+        conn.commit()
+        cur.close()
+        conn.close()
+        
+        return jsonify({
+            "message": "Post updated successfully",
+            "post": process_time_fields(dict(updated_post))
+        }), 200
+        
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+# 게시글 삭제 API
+@app.route('/api/posts/<int:post_id>', methods=['DELETE'])
+def delete_post(post_id):
+    """게시글 삭제"""
+    try:
+        data = request.get_json()
+        
+        # 세션 검증
+        session_token = data.get('session_token')
+        if not session_token:
+            return jsonify({"error": "Session token is required"}), 401
+        
+        user = verify_session(session_token)
+        if not user:
+            return jsonify({"error": "Invalid or expired session"}), 401
+        
+        conn = get_db_connection()
+        cur = conn.cursor(cursor_factory=RealDictCursor)
+        
+        # 게시글 존재 및 작성자 확인
+        cur.execute("SELECT author FROM posts WHERE id = %s", (post_id,))
+        post = cur.fetchone()
+        
+        if not post:
+            return jsonify({"error": "Post not found"}), 404
+        
+        if post['author'] != user['username']:
+            return jsonify({"error": "You can only delete your own posts"}), 403
+        
+        # 관련 데이터 삭제 (외래 키 제약으로 인해)
+        cur.execute("DELETE FROM comment_likes WHERE comment_id IN (SELECT id FROM comments WHERE post_id = %s)", (post_id,))
+        cur.execute("DELETE FROM comments WHERE post_id = %s", (post_id,))
+        cur.execute("DELETE FROM post_likes WHERE post_id = %s", (post_id,))
+        cur.execute("DELETE FROM posts WHERE id = %s", (post_id,))
+        
+        conn.commit()
+        cur.close()
+        conn.close()
+        
+        return jsonify({"message": "Post deleted successfully"}), 200
+        
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+# ===== 댓글 수정/삭제 API =====
+
+# 댓글 수정 API
+@app.route('/api/comments/<int:comment_id>', methods=['PUT'])
+def update_comment(comment_id):
+    """댓글 수정"""
+    try:
+        data = request.get_json()
+        
+        # 세션 검증
+        session_token = data.get('session_token')
+        if not session_token:
+            return jsonify({"error": "Session token is required"}), 401
+        
+        user = verify_session(session_token)
+        if not user:
+            return jsonify({"error": "Invalid or expired session"}), 401
+        
+        content = data.get('content')
+        if not content:
+            return jsonify({"error": "Content is required"}), 400
+        
+        conn = get_db_connection()
+        cur = conn.cursor(cursor_factory=RealDictCursor)
+        
+        # 댓글 존재 및 작성자 확인
+        cur.execute("SELECT author FROM comments WHERE id = %s", (comment_id,))
+        comment = cur.fetchone()
+        
+        if not comment:
+            return jsonify({"error": "Comment not found"}), 404
+        
+        if comment['author'] != user['username']:
+            return jsonify({"error": "You can only edit your own comments"}), 403
+        
+        # 댓글 수정
+        cur.execute("""
+            UPDATE comments 
+            SET content = %s, updated_at = %s 
+            WHERE id = %s 
+            RETURNING *
+        """, (content, datetime.now(KST), comment_id))
+        
+        updated_comment = cur.fetchone()
+        conn.commit()
+        cur.close()
+        conn.close()
+        
+        return jsonify({
+            "message": "Comment updated successfully",
+            "comment": process_time_fields(dict(updated_comment))
+        }), 200
+        
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+# 댓글 삭제 API
+@app.route('/api/comments/<int:comment_id>', methods=['DELETE'])
+def delete_comment(comment_id):
+    """댓글 삭제"""
+    try:
+        data = request.get_json()
+        
+        # 세션 검증
+        session_token = data.get('session_token')
+        if not session_token:
+            return jsonify({"error": "Session token is required"}), 401
+        
+        user = verify_session(session_token)
+        if not user:
+            return jsonify({"error": "Invalid or expired session"}), 401
+        
+        conn = get_db_connection()
+        cur = conn.cursor(cursor_factory=RealDictCursor)
+        
+        # 댓글 존재 및 작성자 확인
+        cur.execute("SELECT author FROM comments WHERE id = %s", (comment_id,))
+        comment = cur.fetchone()
+        
+        if not comment:
+            return jsonify({"error": "Comment not found"}), 404
+        
+        if comment['author'] != user['username']:
+            return jsonify({"error": "You can only delete your own comments"}), 403
+        
+        # 관련 좋아요 삭제 후 댓글 삭제
+        cur.execute("DELETE FROM comment_likes WHERE comment_id = %s", (comment_id,))
+        cur.execute("DELETE FROM comments WHERE id = %s", (comment_id,))
+        
+        conn.commit()
+        cur.close()
+        conn.close()
+        
+        return jsonify({"message": "Comment deleted successfully"}), 200
+        
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+        
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=5000, debug=True)
