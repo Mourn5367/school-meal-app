@@ -73,8 +73,8 @@ lutter pub get
 flutter run   
 ```
 
-## 주요 화면
-
+## 🖥️ 주요 화면
+---
 # 메인 화면
 ![메인 화면](https://velog.velcdn.com/images/mourn5367/post/d73fb89c-fc99-4f03-b914-4a65b4caf12e/image.png)
 
